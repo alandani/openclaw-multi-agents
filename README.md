@@ -32,13 +32,14 @@ n8n POSTs back to /hooks/agent → OpenClaw relays → user
 ```
 ├── CLAUDE.md              # full project brief and specs
 ├── .env.example           # env template (copy to .env, never commit real values)
+├── instances.example.json # per-instance SSH credentials template (real instances.json gitignored)
 ├── shared/                # 9Router config, common prompts/utils
 ├── task-agents/           # ask → respond agents
 │   ├── coding/            #   code-review, debug-triage, app-dev
 │   ├── business/          #   seo-research, metrics-reporting, competitive-watcher, cost-tracking
 │   └── study/             #   research-assistant, study-scheduler, assignment-drafting
 ├── watchers/              # autonomous, n8n-scheduled, silent unless anomaly
-│   ├── infra-watcher/     #   Vultr + Hostinger + cPanel monitoring — BUILD THIS FIRST
+│   ├── infra-watcher/     #   Vultr + Hostinger (multi-VPS) + cPanel monitoring — BUILD THIS FIRST
 │   ├── ci-watcher/
 │   └── pipeline-qa/
 └── ops/                   # approval-gated agents (act, but need sign-off on risky steps)
@@ -61,14 +62,19 @@ rest of the repo goes public later.
 
 ## Getting started
 
-1. Copy the env template and fill in your values:
+1. Copy the templates and fill in your values:
    ```sh
    cp .env.example .env
+   cp instances.example.json instances.json
    ```
-   `.env` is gitignored — real tokens and keys never get committed.
-2. Make sure the OpenClaw gateway is reachable from the n8n server over Tailscale
+   Both `.env` and `instances.json` are gitignored — real tokens and keys never get
+   committed. `instances.json` holds per-instance SSH credentials (each instance has its
+   own key); hosts/IPs are not stored anywhere — they come from the provider APIs at
+   runtime, matched by instance ID.
+2. Test each SSH key manually (`ssh -i <key> user@host`) before wiring it into n8n.
+3. Make sure the OpenClaw gateway is reachable from the n8n server over Tailscale
    and the `/hooks/agent` endpoint responds (see `CLAUDE.md` for the hooks config).
-3. Build order: **infra-watcher first**, then the cron and on-demand paths end-to-end,
+4. Build order: **infra-watcher first**, then the cron and on-demand paths end-to-end,
    then cost-tracking, then the remaining watchers, task agents, and ops agents.
 
 ## Current status

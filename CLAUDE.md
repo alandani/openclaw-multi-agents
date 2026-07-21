@@ -4,10 +4,7 @@
 - **n8n**: running on Ubuntu server (execution/plumbing layer — no LLM calls, holds credentials)
 - **OpenClaw**: running on Mac Mini (reasoning layer + WhatsApp relay via wacli)
 - **Connected via Tailscale**: `gateway.bind: "tailnet"` in OpenClaw config, NOT loopback
-- **Model routing**: OpenClaw uses 9Router to reach Claude Code (`cc`), OpenCode/Kiro (free),
-  GitHub Copilot (`gh` — ~200 token context, use ONLY for single-line/narrow tasks, never
-  multi-file or long-context work), and local LM Studio (Qwen/Gemma — default/primary route,
-  free). Escalate to paid routes only when local models genuinely can't handle the task.
+- **Model routing**: OpenClaw uses 9Router to reach Claude Code (`cc`), OpenCode/Kiro (free), and local LM Studio (Qwen/Gemma — default/primary route,free). Escalate to paid routes only when local models genuinely can't handle the task.
 
 ## Architecture principle
 n8n = execution (API calls, thresholds, scheduling, no LLM cost).
@@ -76,13 +73,33 @@ depends how the gateway is run). Confirm before assuming `${VAR}` substitution w
 - Thresholds: CPU >90%, disk >90%, RAM >90%
 
 **Hostinger**
-- Domain/hosting expiration via API
+- One account, multiple VPS instances. Hostinger's VPS API is more complete than Vultr's —
+  it DOES expose real-time CPU/RAM/disk/network metrics directly, no SSH needed for those.
+- `GET /api/vps/v1/virtual-machines` (or `hapi vps vm list`) returns all instances under the
+  account in one call — use this to drive the loop, don't hardcode instance IDs.
+- Domain/hosting expiration via API separately
 - Tiered alerts: 30 days out (quiet heads-up) → 14 days (repeat, more urgent) → 7 days (urgent, daily until resolved)
+- Still verify during build whether backup status / SSL expiry are covered by the metrics
+  endpoint or need a separate check — not confirmed yet.
+- Note: Hostinger publishes an official MCP server (`hostinger/api-mcp-server`). Not used in
+  this build (keeping one consistent n8n-mediated path across providers), but worth knowing
+  OpenClaw could connect to it directly in the future if useful.
 
-**cPanel** (via SSH — no API, SSH access only)
+**cPanel** (via SSH — no unified API across instances; each instance runs its own separate
+cPanel install, so this is always per-instance regardless of provider)
 - Disk quota full
 - Backup failure
 - SSL certificate expiring (same 30/14/7 tiers as Hostinger)
+- Applies to BOTH Vultr and Hostinger instances that run cPanel
+- **Each instance (Vultr and Hostinger both) has its own separate SSH key — no shared key
+  across instances.** Do NOT put per-instance hosts/keys in `.env` (unmanageable past a
+  handful of instances). Instead:
+  - Host/IP for each instance comes dynamically from each provider's API list call
+    (`GET /v2/instances` for Vultr, `GET /api/vps/v1/virtual-machines` for Hostinger)
+  - SSH credentials (user + key path) live in `instances.json` (gitignored — see below),
+    matched to the API's instance IDs at runtime
+  - n8n: merge both providers' instance lists → Loop Over Items → match against
+    `instances.json` for the right key → SSH in → run checks
 
 **Alerting**
 - WhatsApp only, via OpenClaw relay (see hooks flow above)
@@ -104,6 +121,7 @@ isn't.
 openclaw-agents/
 ├── CLAUDE.md              # this file
 ├── .env.example
+├── instances.example.json # placeholder for per-instance SSH keys, real file gitignored
 ├── shared/                # 9Router config, common prompts/utils
 ├── task-agents/
 │   ├── coding/{code-review,debug-triage,app-dev}/
@@ -136,3 +154,5 @@ of the repo goes public later.
 - SSH access should use key files, not passwords
 - Rotate any token that's been shared in chat/screenshots before going live
 - `.env` is gitignored — only `.env.example` (no real values) gets committed
+- `instances.json` is gitignored — only `instances.example.json` (placeholder values) gets committed
+- Test each SSH key manually (`ssh -i <key> user@host`) before wiring into n8n

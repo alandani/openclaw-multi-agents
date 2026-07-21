@@ -1,0 +1,26 @@
+[
+  {
+    "provider": "vultr",
+    "instance_id": "REPLACE_WITH_VULTR_INSTANCE_ID",
+    "name": "site-a",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "~/.ssh/vultr_site_a_key"
+  },
+  {
+    "provider": "vultr",
+    "instance_id": "REPLACE_WITH_VULTR_INSTANCE_ID",
+    "name": "site-b",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "~/.ssh/vultr_site_b_key"
+  },
+  {
+    "provider": "hostinger",
+    "instance_id": "REPLACE_WITH_HOSTINGER_VM_ID",
+    "name": "site-c",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "~/.ssh/hostinger_site_c_key"
+  }
+]
