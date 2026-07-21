@@ -1,0 +1,50 @@
+{
+  "_comment": "Demo fixture: forced threshold breaches. Run: node bin/infra-check.mjs --mock test/fixtures.json",
+  "now": "2026-07-21T08:00:00.000Z",
+  "http": {
+    "api.vultr.com/v2/instances": {
+      "instances": [
+        { "id": "v1", "label": "site-a", "main_ip": "203.0.113.10", "power_status": "stopped", "server_status": "none" },
+        { "id": "v2", "label": "site-b", "main_ip": "203.0.113.11", "power_status": "running", "server_status": "ok" }
+      ],
+      "meta": { "links": { "next": "" } }
+    },
+    "/vps/v1/virtual-machines/101/metrics": {
+      "cpu_usage": { "unit": "%", "usage": { "1752940800": 95 } },
+      "ram_usage": { "unit": "bytes", "usage": { "1752940800": 1073741824 } },
+      "disk_space": { "unit": "bytes", "usage": { "1752940800": 21474836480 } }
+    },
+    "/vps/v1/virtual-machines": [
+      { "id": 101, "hostname": "site-c", "state": "running", "ipv4": [{ "address": "203.0.113.20" }], "memory": 4096, "disk": 51200 }
+    ],
+    "/domains/v1/portfolio": [
+      { "domain": "expiring-soon.com", "expires_at": "2026-07-26T00:00:00.000Z" },
+      { "domain": "healthy.com", "expires_at": "2027-01-01T00:00:00.000Z" }
+    ]
+  },
+  "instances": [
+    {
+      "provider": "vultr",
+      "instance_id": "v2",
+      "name": "site-b",
+      "ssh_user": "root",
+      "ssh_port": 22,
+      "ssh_key_path": "~/.ssh/fake"
+    },
+    {
+      "provider": "domainesia",
+      "host": "203.0.113.30",
+      "name": "site-d",
+      "ssh_user": "cpaneluser",
+      "ssh_port": 22,
+      "ssh_key_path": "~/.ssh/fake",
+      "cpanel": true,
+      "ssl_domains": ["shop.example.id"]
+    }
+  ],
+  "ssh": {
+    "site-b": "METRICS disk=93 ram=42 cpu=8\n",
+    "site-d": "METRICS disk=55 ram=61 cpu=12\nCPANEL homedisk=99 backup_recent=no\n"
+  },
+  "ssl": { "shop.example.id": 12 }
+}

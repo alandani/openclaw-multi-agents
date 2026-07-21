@@ -77,7 +77,10 @@ depends how the gateway is run). Confirm before assuming `${VAR}` substitution w
   it DOES expose real-time CPU/RAM/disk/network metrics directly, no SSH needed for those.
 - `GET /api/vps/v1/virtual-machines` (or `hapi vps vm list`) returns all instances under the
   account in one call — use this to drive the loop, don't hardcode instance IDs.
-- Domain/hosting expiration via API separately
+- Domain/hosting expiration via API separately. Multiple domains in the account —
+  enumerate ALL of them via `GET /api/domains/v1/portfolio` (base
+  `https://developers.hostinger.com`) and check each one's expiration; never hardcode
+  a single domain.
 - Tiered alerts: 30 days out (quiet heads-up) → 14 days (repeat, more urgent) → 7 days (urgent, daily until resolved)
 - Still verify during build whether backup status / SSL expiry are covered by the metrics
   endpoint or need a separate check — not confirmed yet.
@@ -85,21 +88,33 @@ depends how the gateway is run). Confirm before assuming `${VAR}` substitution w
   this build (keeping one consistent n8n-mediated path across providers), but worth knowing
   OpenClaw could connect to it directly in the future if useful.
 
+**DomaiNesia** (checked 2026-07 — no customer-facing API, no MCP server)
+- Their REST API is **reseller-only** (domain search/registration/transfer, WHMCS module) —
+  not usable for monitoring a regular customer account. No MCP server exists either
+  (unlike Hostinger).
+- Monitoring path: cPanel via SSH per hosting account, same as any other cPanel instance
+  (their hosting is cPanel-based and supports SSH + cPanel API tokens).
+- No list API means hosts CANNOT be discovered at runtime — DomaiNesia entries in
+  `instances.json` carry a static `host` field instead of an `instance_id`.
+- Domain expiration: no API to query — check via WHOIS lookup from n8n, or SSL expiry
+  via cPanel SSH as a proxy. Decide during build.
+
 **cPanel** (via SSH — no unified API across instances; each instance runs its own separate
 cPanel install, so this is always per-instance regardless of provider)
 - Disk quota full
 - Backup failure
 - SSL certificate expiring (same 30/14/7 tiers as Hostinger)
-- Applies to BOTH Vultr and Hostinger instances that run cPanel
-- **Each instance (Vultr and Hostinger both) has its own separate SSH key — no shared key
-  across instances.** Do NOT put per-instance hosts/keys in `.env` (unmanageable past a
-  handful of instances). Instead:
-  - Host/IP for each instance comes dynamically from each provider's API list call
-    (`GET /v2/instances` for Vultr, `GET /api/vps/v1/virtual-machines` for Hostinger)
+- Applies to ALL instances that run cPanel — Vultr, Hostinger, and DomaiNesia
+- **Each instance has its own separate SSH key — no shared key across instances.**
+  Do NOT put per-instance hosts/keys in `.env` (unmanageable past a handful of
+  instances). Instead:
+  - Host/IP for Vultr/Hostinger instances comes dynamically from each provider's API list
+    call (`GET /v2/instances` for Vultr, `GET /api/vps/v1/virtual-machines` for Hostinger);
+    DomaiNesia hosts are static in `instances.json` (no list API)
   - SSH credentials (user + key path) live in `instances.json` (gitignored — see below),
     matched to the API's instance IDs at runtime
-  - n8n: merge both providers' instance lists → Loop Over Items → match against
-    `instances.json` for the right key → SSH in → run checks
+  - n8n: merge provider instance lists + static DomaiNesia entries → Loop Over Items →
+    match against `instances.json` for the right key → SSH in → run checks
 
 **Alerting**
 - WhatsApp only, via OpenClaw relay (see hooks flow above)

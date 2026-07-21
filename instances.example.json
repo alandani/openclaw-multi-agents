@@ -22,5 +22,13 @@
     "ssh_user": "root",
     "ssh_port": 22,
     "ssh_key_path": "~/.ssh/hostinger_site_c_key"
+  },
+  {
+    "provider": "domainesia",
+    "host": "REPLACE_WITH_CPANEL_HOST_OR_IP",
+    "name": "site-d",
+    "ssh_user": "REPLACE_WITH_CPANEL_USER",
+    "ssh_port": 22,
+    "ssh_key_path": "~/.ssh/domainesia_site_d_key"
   }
 ]

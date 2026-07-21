@@ -1,0 +1,103 @@
+{
+  "name": "Infra Watcher",
+  "active": false,
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Daily check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 * * *" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Run infra check (cron)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [260, 0],
+      "parameters": {
+        "command": "cd /opt/openclaw-multi-agents && node watchers/infra-watcher/bin/infra-check.mjs --json --send"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "On-demand webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 220],
+      "webhookId": "a1b2c3d4-9999-4000-8000-000000000009",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "infra-watcher",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Run infra check (on-demand)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [260, 220],
+      "parameters": {
+        "command": "cd /opt/openclaw-multi-agents && node watchers/infra-watcher/bin/infra-check.mjs --json --send --on-demand"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Parse result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 220],
+      "parameters": {
+        "jsCode": "return [{ json: JSON.parse($input.first().json.stdout) }];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [780, 220],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Daily check": {
+      "main": [
+        [
+          { "node": "Run infra check (cron)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "On-demand webhook": {
+      "main": [
+        [
+          { "node": "Run infra check (on-demand)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Run infra check (on-demand)": {
+      "main": [
+        [
+          { "node": "Parse result", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse result": {
+      "main": [
+        [
+          { "node": "Respond", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
