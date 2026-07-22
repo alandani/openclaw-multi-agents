@@ -1,0 +1,43 @@
+[
+  {
+    "provider": "vultr",
+    "instance_id": "56c3ccfe-e2e2-40b2-88c8-8d1264aa684f",
+    "name": "SIGAP GERINDRA",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "FILL_IN_KEY_PATH"
+  },
+  {
+    "provider": "vultr",
+    "instance_id": "baa4655c-aef0-4f04-9a2d-77efa21a6cb6",
+    "name": "ULAK WAYKANAN",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "FILL_IN_KEY_PATH"
+  },
+  {
+    "provider": "vultr",
+    "instance_id": "f32c90c5-a9aa-4ae2-aa7b-84597164b150",
+    "name": "ERP BUMIADIL",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "FILL_IN_KEY_PATH"
+  },
+  {
+    "provider": "vultr",
+    "instance_id": "0f8aeb44-00b0-4ea2-872a-8799d64ec7ca",
+    "name": "HAMS ERP31",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "FILL_IN_KEY_PATH"
+  },
+  {
+    "provider": "vultr",
+    "instance_id": "a91c67ef-c7eb-4adc-beec-12fca97764ba",
+    "name": "GRADIEN",
+    "ssh_user": "root",
+    "ssh_port": 22,
+    "ssh_key_path": "FILL_IN_KEY_PATH",
+    "_note": "This is the n8n host itself — SSH is to localhost/127.0.0.1 from its own perspective, or its own tailnet/public IP works too."
+  }
+]

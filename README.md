@@ -8,23 +8,24 @@ A multi-agent automation setup built on two layers:
   and relays messages over WhatsApp via wacli. Model routing goes through 9Router
   (local LM Studio models by default, paid routes only when needed).
 
-The two are connected over Tailscale. Alerts and on-demand answers are delivered to
-WhatsApp through OpenClaw's `/hooks/agent` endpoint.
+The two are connected over Tailscale. The infra-watcher agent (see below) is the
+exception to the "n8n = execution" split — it's MCP-first and doesn't use n8n at
+all; n8n's role there was tried and unwound (see CLAUDE.md for why).
 
 ## How it works
 
-**Scheduled alerts (cron):**
+**Watchers in general (n8n-driven, where n8n IS used):**
 
 ```
 n8n cron → checks APIs/SSH → threshold breach? → n8n formats message →
 n8n POSTs to OpenClaw /hooks/agent → OpenClaw relays via wacli → user
 ```
 
-**On-demand questions (WhatsApp message in):**
+**Infra watcher specifically (MCP-first, no n8n):**
 
 ```
-User → WhatsApp → OpenClaw (parses intent) → n8n webhook → n8n does the work →
-n8n POSTs back to /hooks/agent → OpenClaw relays → user
+User → WhatsApp → OpenClaw (parses intent, read-only tool scope) →
+Vultr MCP / Hostinger MCP / WHOIS / SSH → OpenClaw answers → user
 ```
 
 ## Repository layout
@@ -38,8 +39,8 @@ n8n POSTs back to /hooks/agent → OpenClaw relays → user
 │   ├── coding/            #   code-review, debug-triage, app-dev
 │   ├── business/          #   seo-research, metrics-reporting, competitive-watcher, cost-tracking
 │   └── study/             #   research-assistant, study-scheduler, assignment-drafting
-├── watchers/              # autonomous, n8n-scheduled, silent unless anomaly
-│   ├── infra-watcher/     #   Vultr + Hostinger (multi-VPS) + cPanel monitoring — BUILD THIS FIRST
+├── watchers/              # autonomous, silent unless anomaly (mostly n8n-scheduled)
+│   ├── infra-watcher/     #   Vultr + Hostinger + cPanel Q&A — MCP-first, no n8n — BUILD THIS FIRST
 │   ├── ci-watcher/
 │   └── pipeline-qa/
 └── ops/                   # approval-gated agents (act, but need sign-off on risky steps)
@@ -71,7 +72,7 @@ rest of the repo goes public later.
    committed. `instances.json` holds per-instance SSH credentials (each instance has its
    own key); hosts/IPs are not stored anywhere — they come from the provider APIs at
    runtime, matched by instance ID.
-2. Test each SSH key manually (`ssh -i <key> user@host`) before wiring it into n8n.
+2. Test each SSH key manually (`ssh -i <key> user@host`) before wiring it into any agent.
 3. Make sure the OpenClaw gateway is reachable from the n8n server over Tailscale
    and the `/hooks/agent` endpoint responds (see `CLAUDE.md` for the hooks config).
 4. Build order: **infra-watcher first**, then the cron and on-demand paths end-to-end,
@@ -80,10 +81,12 @@ rest of the repo goes public later.
 ## Current status
 
 - ✅ Tailscale connectivity, OpenClaw gateway reachable from n8n
-- ✅ `/hooks/agent` → WhatsApp delivery confirmed end-to-end
-- ⬜ Infra-watcher n8n workflow (Vultr API + SSH + Hostinger API + cPanel SSH)
-- ⬜ Cron path test with a forced threshold breach
-- ⬜ On-demand path test
+- ✅ Infra-watcher architecture RESET to MCP-first (no n8n) — the n8n workflow,
+  credentials, and standalone script from an earlier build were unwound and
+  deleted from both this repo and the n8n instance
+- ⬜ Connect Vultr MCP + Hostinger MCP to OpenClaw (read-only scope), WHOIS
+  lookup, and per-instance SSH — see `watchers/infra-watcher/` and CLAUDE.md
+  for the full build order
 - ⬜ Cost-tracking (Vultr billing endpoints)
 
 Full specs, thresholds, and security notes live in [CLAUDE.md](CLAUDE.md).

@@ -1,80 +1,54 @@
 # Infra Watcher
 
-Read-only infrastructure monitoring. Runs daily via n8n cron, stays **silent unless
-something is wrong**, and supports on-demand checks. All alerting goes to WhatsApp
-through the OpenClaw `/hooks/agent` relay as **one combined message** per run
-(🔴 critical / 🟡 warning, critical lines first).
+MCP-first, natural-language Q&A agent — **no n8n involved**. OpenClaw answers
+infra questions (e.g. "what's CPU% of ulak server", "which instance has low
+disk space") by calling read-only tools directly, rather than following a
+fixed n8n workflow branch. Full architecture and rationale live in
+[CLAUDE.md](../../CLAUDE.md) under "Infra watcher — RESET, MCP-first
+architecture" — this file only covers what's specific to this folder.
 
-## What it checks
+READ-ONLY. This agent never reboots, deletes, or modifies anything. Any agent
+that acts on servers is a separate, not-yet-built agent (infra-ops).
 
-| Target | How | Checks |
-|---|---|---|
-| Vultr instances | API `GET /v2/instances` | reachability (`power_status`), locked state |
-| Vultr CPU/RAM/disk | SSH (`df`/`free`/`top`) | >90% thresholds (Vultr API doesn't expose utilization) |
-| Hostinger VPS | API `GET /api/vps/v1/virtual-machines` + `/{id}/metrics` | state + CPU/RAM/disk %, no SSH needed |
-| Hostinger domains | API `GET /api/domains/v1/portfolio` | ALL domains in the account, expiry tiers 30/14/7 days |
-| DomaiNesia / any cPanel host | SSH (static host from `instances.json`) | CPU/RAM/disk, /home quota, backup freshness (48h), plus SSL |
-| SSL certificates | TLS probe on port 443 (no SSH needed) | expiry tiers 30/14/7 days, per `ssl_domains` in `instances.json` |
+## Why no n8n / no standalone script
 
-Failed checks (API down, SSH refused, unresolvable host) surface as 🟡 warnings —
-the watcher never fails silently.
+An earlier version of this build wrapped the checks in an n8n workflow
+(Execute Command node, then later a fully-native HTTP Request + credential +
+branching rebuild). Both were unwound: n8n's workflow logic is a good fit for
+scheduled, deterministic checks, but a poor fit for "ask anything about any
+instance" — every new question shape meant a new branch. MCP tools let
+OpenClaw pick which call to make per question instead.
 
-## Files
+The n8n workflow, credentials, and the standalone `infra-check.mjs` script
+that predated this pivot have been deleted from both this repo and the n8n
+instance (`n8n.gradien.co`) — nothing to run or maintain here for that path
+anymore.
 
-```
-bin/infra-check.mjs   # all check + threshold + message logic (Node ≥18, zero deps)
-workflow.json         # importable n8n workflow (cron + on-demand webhook)
-test/run-tests.mjs    # fixture-driven test suite: node test/run-tests.mjs
-test/fixtures.json    # demo fixture with forced breaches (see below)
-```
+## What lives here
 
-## Setup on the n8n server
+Currently just this README. The actual integration points are:
+- **Vultr MCP** (community server) and **Hostinger MCP** (official) — connected
+  directly to OpenClaw, scoped read-only. Configured on the Mac Mini
+  (OpenClaw's MCP server config), not in this repo.
+- **WHOIS lookup** — for domain expiry, provider-agnostic.
+- **SSH** (read-only commands only) — for cPanel checks and Vultr resource %,
+  per-instance, keyed off `instances.json` (gitignored; see
+  `instances.example.json` at repo root).
 
-1. Clone this repo (the workflow assumes `/opt/openclaw-multi-agents` — edit the two
-   Execute Command nodes if it lives elsewhere), install Node 18+.
-2. Create `.env` and `instances.json` at the repo root (copy the `.example` files).
-   Hosts for Vultr/Hostinger entries are resolved from the provider APIs by
-   `instance_id`; DomaiNesia entries need a static `host` (no list API exists).
-3. Test each SSH key manually first: `ssh -i <key> user@host`.
-4. Dry-run from the shell before wiring into n8n:
-   ```sh
-   node watchers/infra-watcher/bin/infra-check.mjs --verbose        # human output
-   node watchers/infra-watcher/bin/infra-check.mjs --json           # what n8n sees
-   node watchers/infra-watcher/bin/infra-check.mjs --json --send    # actually alerts
-   ```
-5. Import `workflow.json` into n8n, activate. Cron fires daily at 08:00 server time.
+As pieces get built (Vultr MCP connected, Hostinger MCP connected, WHOIS
+capability, SSH wiring) they'll land here as config/docs specific to this
+agent. See CLAUDE.md's "Current status / next steps" for the build order.
 
-## On-demand path
+## Example questions this agent should answer
 
-OpenClaw (or anything else) triggers an immediate check by calling the webhook:
+- "What's the CPU percentage of [server]?" → Hostinger MCP if on Hostinger; SSH if on Vultr
+- "Tell me the closest expiring domain" → WHOIS lookup across `domains_to_watch.json`
+- "Which instance is active in Vultr?" → Vultr MCP, read-only instance list
+- "Which instance has low disk space?" → Hostinger MCP (direct) or SSH (Vultr instances)
 
-```sh
-curl -X POST https://<n8n-host>/webhook/infra-watcher
-```
+## Safety
 
-The on-demand run always sends a WhatsApp reply — `✅ all checks passed (...)` when
-healthy — and returns the full JSON result to the webhook caller. The cron run sends
-nothing when everything is healthy.
-
-## Demo / test
-
-```sh
-node test/run-tests.mjs                                  # 11 scenario tests
-node bin/infra-check.mjs --mock test/fixtures.json       # forced-breach demo message
-```
-
-## Design notes
-
-- **The script does the POST to OpenClaw** (`--send`) instead of a separate n8n HTTP
-  node. Same plumbing, fewer moving parts: n8n contributes scheduling, the webhook,
-  and execution; all check/threshold/format logic is in one testable script. Still
-  zero LLM cost — the hooks `message` is wrapped in "reply with exactly this text and
-  nothing else:" to force verbatim relay.
-- The Hostinger **metrics response shape** (`cpu_usage`/`ram_usage`/`disk_space` maps)
-  is parsed defensively; if the real API returns a different shape, the watcher emits
-  a 🟡 "could not read metrics" warning rather than crashing — fix `latestMetric()` /
-  field names in `checkHostingerVms()` when confirming against the live account.
-- Backup freshness = any file under `backup_path` (default `/backup`) modified in the
-  last 48h. Point `backup_path` at wherever your cPanel backups actually land.
-- Exit code is 0 whether or not issues were found (result is in the JSON); 2 means
-  fatal config error (no API keys at all).
+Both Vultr MCP and Hostinger MCP can also write/act (reboot, delete, modify
+DNS) — this agent must only ever be given the read-only tools from each, via
+either scoped tool exposure or a read-only API key. No destructive capability
+reaches this agent under any circumstance.
