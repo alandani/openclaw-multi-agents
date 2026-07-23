@@ -1,28 +1,14 @@
 # Infra Watcher
 
-MCP-first, natural-language Q&A agent — **no n8n involved**. OpenClaw answers
-infra questions (e.g. "what's CPU% of ulak server", "which instance has low
-disk space") by calling read-only tools directly, rather than following a
-fixed n8n workflow branch. Full architecture and rationale live in
-[CLAUDE.md](../../CLAUDE.md) under "Infra watcher — RESET, MCP-first
-architecture" — this file only covers what's specific to this folder.
+MCP-first, natural-language Q&A agent. OpenClaw answers infra questions (e.g.
+"what's CPU% of ulak server", "which instance has low disk space") by calling
+read-only tools directly rather than following a fixed workflow branch. Full
+architecture and rationale live in [CLAUDE.md](../../CLAUDE.md) under
+"Infra watcher — RESET, MCP-first architecture" — this file only covers
+what's specific to this folder.
 
 READ-ONLY. This agent never reboots, deletes, or modifies anything. Any agent
 that acts on servers is a separate, not-yet-built agent (infra-ops).
-
-## Why no n8n / no standalone script
-
-An earlier version of this build wrapped the checks in an n8n workflow
-(Execute Command node, then later a fully-native HTTP Request + credential +
-branching rebuild). Both were unwound: n8n's workflow logic is a good fit for
-scheduled, deterministic checks, but a poor fit for "ask anything about any
-instance" — every new question shape meant a new branch. MCP tools let
-OpenClaw pick which call to make per question instead.
-
-The n8n workflow, credentials, and the standalone `infra-check.mjs` script
-that predated this pivot have been deleted from both this repo and the n8n
-instance (`n8n.gradien.co`) — nothing to run or maintain here for that path
-anymore.
 
 ## What lives here
 

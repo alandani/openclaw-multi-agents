@@ -1,7 +1,7 @@
 # OpenClaw Multi-Agent System — Project Brief
 
 ## Infrastructure
-- **n8n**: running on Ubuntu server (execution/plumbing layer — no LLM calls, holds credentials)
+- **n8n**: still running on Ubuntu server but **no longer the default execution layer** (see DECIDED section below)
 - **OpenClaw**: running on Mac Mini (reasoning layer + WhatsApp relay via wacli)
 - **Connected via Tailscale**: `gateway.bind: "tailnet"` in OpenClaw config, NOT loopback
 - **Model routing**: OpenClaw uses 9Router to reach Claude Code (`cc`), OpenCode/Kiro (free),
@@ -9,21 +9,24 @@
   multi-file or long-context work), and local LM Studio (Qwen/Gemma — default/primary route,
   free). Escalate to paid routes only when local models genuinely can't handle the task.
 
-## Architecture principle
-n8n = execution (API calls, thresholds, scheduling, no LLM cost).
-OpenClaw = reasoning (parsing intent, judgment calls) + acts as WhatsApp relay since it's the
-only thing holding the wacli session.
+## Architecture principle — DECIDED: OpenClaw-native cron as default
 
-Flow for cron/scheduled alerts:
-```
-n8n cron → checks APIs/SSH → threshold breach? → n8n formats message →
-n8n POSTs to OpenClaw /hooks/agent → OpenClaw relays via wacli → user
-```
+**n8n is no longer the default execution layer.** OpenClaw's built-in cron now covers
+all scheduled-agent needs. This repo replaces the earlier n8n-as-execution architecture
+with OpenClaw-native scheduling. See "Cron job patterns for watchers" below for the
+concrete templates to follow.
 
-Flow for on-demand questions (user messages OpenClaw's WhatsApp number):
+### Flow for cron/scheduled alerts (current, working)
 ```
-User → WhatsApp → OpenClaw (parses intent) → OpenClaw calls n8n webhook →
-n8n does the work → n8n POSTs back to OpenClaw /hooks/agent → OpenClaw relays → user
+OpenClaw cron → command payload (runs daily-digest.mjs) → stdout captured →
+OpenClaw announces via wacli → user
+```
+No webhooks, no n8n round-trip, no LLM cost.
+
+### Flow for on-demand questions (no change)
+```
+User → WhatsApp → OpenClaw (parses intent, calls read-only MCP/SSH tools directly) →
+OpenClaw answers → user
 ```
 
 ## OpenClaw hooks config (already working)
@@ -55,7 +58,7 @@ depends how the gateway is run). Confirm before assuming `${VAR}` substitution w
 - **Business analytics**: SEO research, metrics reporting, competitive watcher, **cost tracking** (new — Vultr billing API now, Hostinger + others later)
 - **Study**: research assistant, study scheduler, assignment drafting (approval gate before submission)
 
-### Autonomous watchers (n8n-run, scheduled, silent unless anomaly, no LLM cost)
+### Autonomous watchers (OpenClaw-native cron, scheduled, silent unless anomaly, no LLM cost)
 - **Infra watcher** ← currently being built, see spec below
 - CI watcher (not started)
 - Pipeline QA (not started)
@@ -92,9 +95,9 @@ You → WhatsApp → OpenClaw (read-only tool scope)
 **Why no n8n here**: n8n's workflow logic is rigid (good for scheduled, deterministic
 checks) but MCP is a better fit for ad-hoc natural language questions — the agent picks
 which tool to call based on what's actually asked, rather than following a fixed branch.
-n8n may still be reintroduced later specifically for the scheduled/proactive alert path if
-OpenClaw doesn't have its own heartbeat scheduling — TBD, not blocking on this decision to
-start building the Q&A path.
+OpenClaw's native cron now provides the scheduled/proactive alert path that was previously
+marked as TBD. See "Cron job patterns for watchers" below for the concrete patterns —
+this decision is closed.
 
 **Confirmed provider capabilities**
 - **Vultr**: MCP wraps the same public API — does NOT add CPU/RAM/disk metrics that the raw
@@ -155,7 +158,7 @@ openclaw-agents/
 │   ├── business/{seo-research,metrics-reporting,competitive-watcher,cost-tracking}/
 │   └── study/{research-assistant,study-scheduler,assignment-drafting}/
 ├── watchers/
-│   ├── infra-watcher/      # n8n workflow export + docs — BUILD THIS FIRST
+│   ├── infra-watcher/      # Cron- and MCP-driven — BUILD THIS FIRST
 │   ├── ci-watcher/
 │   └── pipeline-qa/
 └── ops/
@@ -165,6 +168,96 @@ openclaw-agents/
 
 `ops/` and anything touching real credentials/client data should stay private even if the rest
 of the repo goes public later.
+
+## Cron job patterns for watchers (copy-pasteable)
+
+OpenClaw-native cron uses two payload patterns for watcher agents. Both avoid n8n entirely
+— no webhooks, no workflow server, no LLM cost for deterministic checks.
+
+### 1. Command payload — always-run digest (proven: infra-watcher-daily)
+
+Best for: scheduled checks that always produce output, like a daily summary or heartbeat.
+
+**Working example (infra-watcher-daily):**
+```bash
+openclaw cron add \
+  --name "ci-watcher-daily" \
+  --cron "0 8 * * *" \
+  --tz "Australia/Sydney" \
+  --command "node /path/to/watchers/ci-watcher/daily-check.mjs" \
+  --command-cwd "/Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents" \
+  --announce \
+  --channel whatsapp \
+  --to "+6282261009500" \
+  --session isolated
+```
+
+The command payload (`--command <shell>`) runs as `argv: ["sh", "-lc", <shell>]` inside
+the Gateway process — no model spin-up, no LLM token burn. Stdout is captured and delivered
+as the message. The `infra-watcher-daily` job (id `cb1f9446-...`, runs at `0 8 * * *`) uses
+this pattern with `daily-digest.mjs` and is confirmed working with `lastRunStatus: ok`.
+
+**For ci-watcher and pipeline-qa (always-run daily check):**
+1. Create `watchers/ci-watcher/daily-check.mjs` (or similar) — a standalone Node.js script
+   that calls the relevant API(s) and prints a formatted message. No OpenClaw agent context,
+   no MCP, no subagent — just `execSync` / `fetch` / `fs` calls.
+2. Register the cron job with the above `--command` pattern.
+3. Use `--trigger-script` (see below) when you only want to fire on anomaly — but for
+   daily watchers that always produce output, plain `--command` is sufficient.
+
+### 2. Trigger.script — condition watcher (silent unless anomaly)
+
+Best for: polling checks that should stay silent until something changes (e.g. CI status,
+pipeline failure, threshold breach).
+
+**Template:**
+```bash
+openclaw cron add \
+  --name "pipeline-qa-watcher" \
+  --cron "*/15 * * * *"           # every 15 minutes \
+  --tz "Australia/Sydney" \
+  --trigger-script "/path/to/run-check.mjs" \
+  --command "node /path/to/alert.mjs"    # runs only when trigger fires \
+  --announce \
+  --channel whatsapp \
+  --to "+6282261009500" \
+  --session isolated
+```
+
+The trigger script (`--trigger-script <path>`) is a condition gate that runs on every
+scheduled tick. It must return JSON `{ fire, message?, state? }`:
+- `fire: true` → the command payload executes; the message is appended to its context
+- `fire: false` → the tick is silently skipped
+- `state` is persisted between runs (16 KB cap) so the script can diff against the last
+  observation and only fire on state changes
+
+**Example trigger script for ci-watcher** (`watchers/ci-watcher/ci-check.mjs`):
+```js
+#!/usr/bin/env node
+// Reads trigger.state from env or stored state, compares current CI status,
+// returns { fire, message, state }.
+import { execSync } from 'child_process';
+const prev = process.env.TRIGGER_STATE ? JSON.parse(process.env.TRIGGER_STATE) : {};
+const status = execSync('gh pr checks --json state -q \'.\[\].state\' | sort -u', { encoding: 'utf8' }).trim();
+const changed = status !== prev.status;
+const result = { fire: changed, message: changed ? `CI status changed: ${prev.status ?? 'none'} → ${status}` : null, state: { status } };
+console.log(JSON.stringify(result));
+```
+
+The trigger.script approach is exact for "silent unless anomaly" — no output at all on
+healthy ticks, zero spam, fired only when the condition really changes.
+
+### Which pattern to use for ci-watcher and pipeline-qa
+
+| Watcher | Pattern | Frequency | Rationale |
+|---|---|---|---|
+| **ci-watcher** | `trigger.script` + `--command` | Every 15 min | CI status rarely changes; spam on every tick is worse than a short silence. Fire only when a check transitions (e.g. pending→fail, fail→pass). |
+| **pipeline-qa** | `trigger.script` + `--command` | Every 15 min | Same reasoning as ci-watcher — pipeline failures are exceptions, not the norm. Only alert on change. |
+
+For the trigger scripts, follow the same structure as `infra-watcher/daily-digest.mjs`:
+standalone Node.js, no OpenClaw agent context, no MCP tools, pure `execSync`/fetch/stdout.
+The `daily-digest.mjs` source (at `watchers/infra-watcher/daily-digest.mjs`) is the proven
+template — modelled on its `execSync` calls, error handling, and threshold checks.
 
 ## Current status / next steps
 1. ✅ Tailscale connected, OpenClaw gateway reachable from n8n server
@@ -178,8 +271,9 @@ of the repo goes public later.
 6. ⬜ Set up WHOIS lookup capability + `domains_to_watch.json`, test "closest expiring domain"
 7. ⬜ Set up per-instance SSH access (`instances.json`) for cPanel checks + Vultr resource %
 8. ⬜ Test all four original example questions end-to-end via WhatsApp
-9. ⬜ Decide proactive/scheduled alert mechanism (OpenClaw native heartbeat vs. reintroducing
-   n8n just for the cron trigger) — not blocking on-demand Q&A work
+9. ✅ DECIDED: OpenClaw-native cron for all scheduled watchers. n8n kept only if a specific
+   future need requires something cron genuinely can't do (credential vault/workflow UI) —
+   not as default execution layer. See "Cron job patterns for watchers" below.
 10. ⬜ Only after infra-watcher is solid: move to CI watcher, then task agents, then ops agents
     (infra-ops — the separate agent that CAN act — is a distinct future build, not this one)
 

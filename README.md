@@ -1,27 +1,30 @@
 # OpenClaw Multi-Agent System
 
-A multi-agent automation setup built on two layers:
+A multi-agent automation setup running on two machines, with OpenClaw's native
+cron as the primary execution layer for all scheduled agents:
 
-- **n8n** (Ubuntu server) — the execution layer: API calls, SSH checks, thresholds,
-  scheduling. Holds all credentials. No LLM calls, no LLM cost.
-- **OpenClaw** (Mac Mini) — the reasoning layer: parses intent, makes judgment calls,
-  and relays messages over WhatsApp via wacli. Model routing goes through 9Router
-  (local LM Studio models by default, paid routes only when needed).
+- **OpenClaw** (Mac Mini) — the reasoning and execution layer: parses intent,
+  makes judgment calls, runs scheduled checks via native cron, and relays messages
+  over WhatsApp via wacli. Model routing goes through 9Router (local LM Studio
+  models by default, paid routes only when needed).
+- **n8n** (Ubuntu server) — still running but **no longer the default execution
+  layer** (see [CLAUDE.md](CLAUDE.md)'s DECIDED section for the full rationale).
+  OpenClaw's native cron has replaced n8n for all scheduled-agent needs; n8n is
+  retained only if a specific future need requires workflow UI or credential
+  vaulting that cron doesn't provide.
 
-The two are connected over Tailscale. The infra-watcher agent (see below) is the
-exception to the "n8n = execution" split — it's MCP-first and doesn't use n8n at
-all; n8n's role there was tried and unwound (see CLAUDE.md for why).
+The two machines are connected over Tailscale.
 
 ## How it works
 
-**Watchers in general (n8n-driven, where n8n IS used):**
+**Watchers in general (OpenClaw-native cron, no n8n):**
 
 ```
-n8n cron → checks APIs/SSH → threshold breach? → n8n formats message →
-n8n POSTs to OpenClaw /hooks/agent → OpenClaw relays via wacli → user
+OpenClaw cron → command payload → checks APIs/SSH → stdout captured →
+OpenClaw announces via wacli → user
 ```
 
-**Infra watcher specifically (MCP-first, no n8n):**
+**Infra watcher specifically (MCP-first on-demand Q&A, no cron):**
 
 ```
 User → WhatsApp → OpenClaw (parses intent, read-only tool scope) →
@@ -73,8 +76,9 @@ rest of the repo goes public later.
    own key); hosts/IPs are not stored anywhere — they come from the provider APIs at
    runtime, matched by instance ID.
 2. Test each SSH key manually (`ssh -i <key> user@host`) before wiring it into any agent.
-3. Make sure the OpenClaw gateway is reachable from the n8n server over Tailscale
-   and the `/hooks/agent` endpoint responds (see `CLAUDE.md` for the hooks config).
+3. Make sure the OpenClaw gateway is reachable over Tailscale and the `/hooks/agent`
+   endpoint responds (see `CLAUDE.md` for the hooks config). Hooks are used for
+   WhatsApp relay, not for n8n.
 4. Build order: **infra-watcher first**, then the cron and on-demand paths end-to-end,
    then cost-tracking, then the remaining watchers, task agents, and ops agents.
 

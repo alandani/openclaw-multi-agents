@@ -3,4 +3,5 @@
 .env.*.local
 instances.json
 .claude/settings.local.json
+.trash-review/
 .DS_Store
