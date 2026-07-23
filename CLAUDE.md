@@ -113,7 +113,7 @@ this decision is closed.
 
 **What still needs a maintained list (not credentials, just identifiers)**
 ```
-domains_to_watch.json   # domain names only, e.g. ["site-a.com", "site-b.id"]
+domains.json   # domain names only, e.g. ["site-a.com", "site-b.id"]
 instances.json          # per-instance SSH user + key path, matched against each
                          # provider's MCP-returned instance ID at query time
 ```
@@ -127,7 +127,7 @@ belongs only to the separate infra-ops agent (not yet built).
 
 **Original questions this agent should answer** (from the redesign brief):
 - "What's the CPU percentage of [server]?" → Hostinger MCP if on Hostinger; SSH if on Vultr
-- "Tell me the closest expiring domain" → WHOIS lookup across `domains_to_watch.json`
+- "Tell me the closest expiring domain" → WHOIS lookup across `domains.json`
 - "Which instance is active in Vultr?" → Vultr MCP, read-only instance list
 - "Which instance has low disk space?" → Hostinger MCP (direct) or SSH (Vultr instances)
 
@@ -268,7 +268,7 @@ template — modelled on its `execSync` calls, error handling, and threshold che
    query ("which Vultr instances are active")
 5. ⬜ Connect Hostinger MCP (official) to OpenClaw, scoped read-only, test with a live query
    ("what's the CPU% of [instance]")
-6. ⬜ Set up WHOIS lookup capability + `domains_to_watch.json`, test "closest expiring domain"
+6. ⬜ Set up WHOIS lookup capability + `domains.json`, test "closest expiring domain"
 7. ⬜ Set up per-instance SSH access (`instances.json`) for cPanel checks + Vultr resource %
 8. ⬜ Test all four original example questions end-to-end via WhatsApp
 9. ✅ DECIDED: OpenClaw-native cron for all scheduled watchers. n8n kept only if a specific
@@ -283,7 +283,7 @@ template — modelled on its `execSync` calls, error handling, and threshold che
 - Rotate any token that's been shared in chat/screenshots before going live
 - `.env` is gitignored — only `.env.example` (no real values) gets committed
 - `instances.json` is gitignored — only `instances.example.json` (placeholder values) gets committed
-- `domains_to_watch.json` is fine to commit (just domain names, no credentials) unless the
+- `domains.json` is fine to commit (just domain names, no credentials) unless the
   list itself reveals sensitive client/business info — use judgment per repo visibility
 - Test each SSH key manually (`ssh -i <key> user@host`) before wiring into any workflow
 - MCP servers (Vultr, Hostinger) must be scoped to READ-ONLY tools for this agent — verify

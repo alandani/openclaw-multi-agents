@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Provider-agnostic domain expiry check via WHOIS. Reads domain names from
-// domains_to_watch.json (repo root) and reports days-until-expiry for each,
+// domains.json (repo root) and reports days-until-expiry for each,
 // sorted soonest-first. No registrar credential needed - expiry is public
 // WHOIS data, so this covers Hostinger, DomaiNesia, or any other registrar
 // with the same script.
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const LIST_PATH = join(__dirname, '..', '..', 'domains_to_watch.json');
+const LIST_PATH = join(__dirname, '..', '..', 'domains.json');
 
 const EXPIRY_PATTERNS = [
   /Registry Expiry Date:\s*(.+)/i,
@@ -76,7 +76,7 @@ async function checkDomain(domain) {
 function loadDomainList() {
   try {
     const raw = JSON.parse(readFileSync(LIST_PATH, 'utf8'));
-    if (!Array.isArray(raw)) throw new Error('domains_to_watch.json must be a JSON array');
+    if (!Array.isArray(raw)) throw new Error('domains.json must be a JSON array');
     return raw;
   } catch (err) {
     console.error(`Could not read ${LIST_PATH}: ${err.message}`);

@@ -2,6 +2,7 @@
 .env.local
 .env.*.local
 instances.json
+domains.json
 .claude/settings.local.json
 .trash-review/
 .DS_Store

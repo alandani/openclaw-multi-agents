@@ -53,7 +53,7 @@ bare-metal or other unrelated tool and present its result as the answer.
 node /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/watchers/infra-watcher/domain-check.mjs --json
 ```
 
-Reads `domains_to_watch.json` at the repo root (currently `motorhondalampung.com`
+Reads `domains.json` at the repo root (currently `motorhondalampung.com`
 and `gradien.co` — DomaiNesia domains not added yet), runs WHOIS on each, returns
 days-until-expiry sorted soonest-first. Use for "what's my closest expiring
 domain", "when does X expire". Severity: ≤7 days critical (🔴), ≤14 or ≤30 days

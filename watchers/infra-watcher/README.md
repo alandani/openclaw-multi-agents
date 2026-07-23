@@ -28,7 +28,7 @@ agent. See CLAUDE.md's "Current status / next steps" for the build order.
 ## Example questions this agent should answer
 
 - "What's the CPU percentage of [server]?" → Hostinger MCP if on Hostinger; SSH if on Vultr
-- "Tell me the closest expiring domain" → WHOIS lookup across `domains_to_watch.json`
+- "Tell me the closest expiring domain" → WHOIS lookup across `domains.json`
 - "Which instance is active in Vultr?" → Vultr MCP, read-only instance list
 - "Which instance has low disk space?" → Hostinger MCP (direct) or SSH (Vultr instances)
 
