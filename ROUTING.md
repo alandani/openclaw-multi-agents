@@ -16,16 +16,42 @@ The routing logic is:
 4. Clusters are ordered by expected frequency of use (coding → business → study → infra).
    Grouped by cluster, not by specialist, so the table stays maintainable as agents are added.
 
-**Ack-first rule**: For anything expected to take more than a few seconds (i.e. any
-subagent spawn), send a WhatsApp acknowledgment *before* spawning:
+**Acknowledgment & Failure Handling**
+
+Before spawning any subagent expected to take more than a few seconds (multi-tool work,
+SSH/infra checks, research, code reviews — anything that'd leave dead air), send a
+WhatsApp acknowledgment so the user knows you're on it. Skip the ack for trivial/fast
+lookups you'd answer directly.
+
+**Tone**: Casual English — like a helpful assistant saying "on it." No corporate filler,
+no robotic status-speak. Keep it conversational.
+
+**Example phrasings** (vary these rather than repeating the same line every time):
+
+1. **Infra/server check**: "On it — let me go check, back in a sec 👀"
+2. **Coding/review**: "Let me look through the code — gimme a moment ⏳"
+3. **Research/synthesis**: "Let me dig into that and pull together what I find 🔍"
+4. **General/slow task**: "Looking this up now — won't be long 🙏"
+5. **Assignment/essay**: "Got it, working on a draft — I'll share it soon 🖊️"
+
+The delivery mechanism (unchanged from the earlier ack-first rule):
 
 ```
 Hook: POST /hooks/agent
-Body: { "message": "reply with exactly: Okay, let me check on [X] — one moment please 🙏", "deliver": true, "channel": "whatsapp", "to": "<sender-number>" }
+Body: { "message": "reply with exactly: <pick the relevant phrasing from above, adjust slightly to context>", "deliver": true, "channel": "whatsapp", "to": "<sender-number>" }
 ```
 
-Then spawn the subagent and `sessions_yield`. The subagent's return will arrive in your
-session as the next message — relay its answer back to the user via the same hook.
+Then spawn the subagent and `sessions_yield`. The subagent's return arrives as the next
+message — relay its answer.
+
+**When the subagent fails** (completion Status: `failed`, `timed out`, or `unknown`):
+
+1. **Silent retry**: If the specialist lists a fallback model and the primary failed,
+   retry once with the fallback — a second `sessions_spawn` + `sessions_yield` loop
+   without sending another ack.
+2. **If the fallback also fails or no fallback exists**: Send a short honest follow-up:
+   *"That didn't go through — want me to try again?"* or similar. **Never leave an acked
+   message unanswered.** The user got "on it" and then heard nothing — close that loop.
 
 ---
 
@@ -34,6 +60,8 @@ session as the next message — relay its answer back to the user via the same h
 Three specialists share this cluster — domain overlap is high, so disambiguate carefully
 (see the "ambiguitity" note at the end of each entry and the [No match](#no-match--ambiguous-intent)
 section for guidance).
+
+> **Flat design note**: The independent spawning of each coding specialist directly by the main dispatcher (rather than through a nested orchestrator) is a deliberate architecture decision — see the "DECIDED: Coding cluster stays flat" section in [CLAUDE.md](./CLAUDE.md) for the full rationale.
 
 ### code-review
 
@@ -58,6 +86,8 @@ sessions_spawn(
 )
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
 ---
 
@@ -84,6 +114,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ### app-dev
@@ -108,6 +140,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ## Cluster 2: Business Analytics
@@ -131,6 +165,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ### metrics-reporting
@@ -152,6 +188,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ### competitive-watcher
@@ -172,6 +210,8 @@ sessions_spawn(
 )
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
 ---
 
@@ -200,6 +240,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ## Cluster 3: Study
@@ -223,6 +265,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ### study-scheduler
@@ -243,6 +287,8 @@ sessions_spawn(
 )
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
 ---
 
@@ -270,6 +316,8 @@ sessions_spawn(
 )
 ```
 If that fails, retry with model: `9router/cc/claude-opus-4-8`.
+
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
 ---
 
@@ -308,6 +356,8 @@ sessions_spawn(
 ```
 If that fails or the local model can't drive the tools correctly, retry with
 model: `9router/oc/deepseek-v4-flash-free`.
+
+> **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
 > **Canonical delegation rule**: The live main OpenClaw agent reads the
 > delegation rule from `/Users/alandani/.openclaw/workspace/AGENTS.md` every turn.
@@ -359,6 +409,8 @@ sessions_spawn(
 ```
 If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
+> **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
 ---
 
 ### invoicing (approval-gated)
@@ -387,6 +439,8 @@ sessions_spawn(
 )
 ```
 If that fails, retry with model: `9router/cc/claude-opus-4-8`.
+
+> **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
 ---
 

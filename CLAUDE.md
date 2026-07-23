@@ -29,6 +29,28 @@ User → WhatsApp → OpenClaw (parses intent, calls read-only MCP/SSH tools dir
 OpenClaw answers → user
 ```
 
+## Architecture decision — DECIDED: Coding cluster stays flat (no nested orchestrator)
+
+**The three coding specialists (code review, debug/triage, app-dev) remain independent subagent task briefs spawned directly by the main dispatcher at `maxSpawnDepth: 1`.** This is a deliberate rejection of the alternative "nested orchestrator" design where a coding-orchestrator subagent would itself spawn further sub-subagents for decomposed work.
+
+**Rationale:**
+- Matches how the other 10 specialists already work — consistency
+- Cheaper (no extra LLM hop for an orchestrator layer)
+- Avoids subagent sprawl for work that doesn't need decomposition
+- No config change needed (stays at OpenClaw's default `maxSpawnDepth: 1`)
+- Can be revisited later if a concrete case emerges where a coding specialist genuinely needs to decompose into sub-work it can't do inline — at that point, raising `maxSpawnDepth` to 2 (plus likely tuning `maxChildrenPerAgent`) would be a one-line config patch, not a redesign
+
+## Architecture decision — DECIDED: Skill Workshop migration deferred
+
+**The plain-markdown-file pattern (specialist briefs like `watchers/infra-watcher/AGENT.md`, referenced by literal file path in `sessions_spawn` task text) stays as-is for now. Skill Workshop conversion is deferred, not rejected — it will only be revisited once the roster has grown past the current 1 built specialist (infra-watcher) and hand-maintaining plain markdown files actually becomes a real pain point in practice.**
+
+**Rationale:**
+- The plain-markdown-via-sessions_spawn(task: "Read X.md...") pattern already works — infra-watcher proves it in production
+- This isn't fixing something broken; Skill Workshop trades upfront conversion effort for better long-term hygiene as the roster scales — a maturity improvement, not a functional gap
+- Converting now means converting a brief that already works purely for process hygiene, while 12 unbuilt specialists are still ahead
+- Better sequencing: build a few more specialists as plain AGENT.md files first (matching the proven pattern), see if "N hand-maintained markdown files" pain actually shows up, then decide if Skill Workshop conversion is worth it — rather than converting before the pain is confirmed
+- Lower priority than the other punch-list items — no urgency, purely optional hygiene
+
 ## OpenClaw hooks config (already working)
 ```json
 {
