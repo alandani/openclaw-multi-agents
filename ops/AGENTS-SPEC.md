@@ -502,21 +502,47 @@ either agent can be built:
    gate catches risky ones? A command allowlist via `tools.exec.mode: "allowlist"` in
    the exec-approvals system would provide hard enforcement for `exec`.
 
+   **RESOLVED** — strict allowlist with 6 categories (A-F) documented in
+   `ops/infra-ops/AGENT.md` § "SSH Command Allowlist". Currently **self-policed**
+   (no server-side forced-command enforcement exists yet — that's a separate,
+   not-yet-made infrastructure decision; see AGENT.md § "Current SSH key situation").
+   See AGENT.md for the full allowlist and § "Permanent Blacklist" for the
+   corresponding forbidden list.
+
 2. **Separate WhatsApp or same dispatcher?**: Should infra-ops's confirmation and
    results go back through the main dispatcher (current design), or should it have its
    own WhatsApp channel/number for dedicated ops conversations?
+
+   **RESOLVED** — same dispatcher, no separate WhatsApp channel. infra-ops is spawned
+   via `sessions_spawn(agentId: "infra-ops")` from the main dispatcher and
+   communicates results back through it. No `bindings[]` entry needed.
 
 3. **Cron schedule needed?**: Should infra-ops have a proactive mode (e.g. "check Nginx
    on all servers every morning, report any failures and ask if I should restart"), or
    is it purely on-demand?
 
+   **RESOLVED** — no heartbeat/cron/proactive mode. Purely on-demand, spawned only by
+   the main dispatcher in response to a user request. heartbeat.every set to "0m".
+   (Revisit later once the agent is battle-tested and trusted.)
+
 4. **Exact destructive-operation blacklist**: Beyond the open-ended "no rm -rf" rule,
    are there specific operations that should be categorically denied? (e.g. firewall
    changes, DNS modifications, database DROP, package removal)
 
+   **RESOLVED** — permanent blacklist documented in `ops/infra-ops/AGENT.md` §
+   "Permanent Blacklist — NEVER Allowed (No Exceptions, No Confirmation Override)".
+   Covers: rm -rf, DROP DATABASE/TABLE, DELETE without WHERE, docker system prune -a,
+   ALL firewall/DNS changes, package removal, and chmod/chown on system-critical
+   paths. The list is absolute — no confirmation can unlock these.
+
 5. **GitOps preference**: Should infra-ops commit config changes to a git repo and
    there be a separate deployment pipeline, or should it push changes directly? The
    direct approach is simpler but less auditable.
+
+   **RESOLVED** — direct actions only for operational changes on managed servers. No
+   git-commit-and-pipeline requirement. (Changes to files in this repo itself are not
+   operational actions and follow normal review/commit workflows.)  Revisit if config
+   drift or audit gaps become a real problem.
 
 ### for invoicing
 
@@ -564,6 +590,20 @@ either agent can be built:
 
 ---
 
+## Decisions (resolved for infra-ops #1-5)
+
+The following decisions for infra-ops-specific open questions (#1-5) have been
+resolved in the course of building the agent. Questions #6-12 (invoicing + general)
+remain open and are untouched here.
+
+| # | Question | Resolution | Rationale |
+|---|----------|-----------|-----------|
+| 1 | SSH command allowlist | **Strict, self-policed command allowlist** (6 categories, A–F, plus a permanent blacklist) documented in `ops/infra-ops/AGENT.md`. No mutate-capable SSH key or server-side enforcement exists yet — provisioning one is a separate, not-yet-made decision. | Matches the spirit of infra-watcher's forced-command pattern (`readonly-check.sh`), but server-side enforcement wasn't part of this task's scope — the allowlist below is the working boundary until that infrastructure is designed and built deliberately. |
+| 2 | Separate WhatsApp or same dispatcher? | **Same dispatcher** — results go back through the main dispatcher via `sessions_spawn`. No dedicated ops WhatsApp channel. | infra-ops is an on-demand agent like all others in the roster; adding a dedicated channel adds complexity without a demonstrated need. Results go through the existing ack+relay pattern. |
+| 3 | Cron schedule needed? | **No heartbeat** (`every: "0m"`). Purely on-demand. | infra-ops is action-oriented (restart, deploy, migrate) — not a periodic status check. Proactive alerts ("check Nginx on all servers every morning") are best handled by the read-only infra-watcher instead; infra-ops only gets involved when infra-watcher finds something that needs fixing. |
+| 4 | Destructive-operation blacklist | **Confirmed as listed in the existing draft**: `rm -rf`, `DROP DATABASE`/`DROP TABLE`/unscoped `DELETE`, `docker system prune -a`. **Additional**: firewall and DNS changes are entirely out of scope — they stay manual via provider dashboards. | These operations are data-loss or high-blast-radius events that no agent should perform. The blacklist is documented in `ops/infra-ops/AGENT.md` (the "never allowed" section) and enforced by tool scoping. Firewall/DNS are out because they affect availability/security globally and require provider-dashboard access anyway. |
+| 5 | GitOps preference | **Direct changes only** for now — no separate deploy pipeline. | infra-ops is a proof-stage agent; adding a GitOps layer on day one is overhead with no demonstrated need. Revisit if config drift, audit gaps, or rollback difficulties become a real pain point in practice. |
+
 ## 4. Implementation Sequence
 
 When the open questions above are resolved, the implementation order should be:
@@ -581,6 +621,115 @@ When the open questions above are resolved, the implementation order should be:
    invoice for invoicing)
 7. **Test the confirmation gate** — verify the agent actually waits before mutating
 8. **Test live** — run a real restart / send a real invoice (with user watching)
+
+## infra-ops — Finalized Config (pending apply)
+
+This section records the finalized `agents.list[]` config entry for infra-ops,
+reflecting the 5 resolved decisions from the Open Questions section above.
+**This is a draft for review — do NOT copy into `openclaw.json` until the human
+operator has reviewed and confirmed.**
+
+Key differences from the spec's initial proposal (see § "b) Proposed Config
+Entry" above):
+
+- **SSH command allowlist**: Not enforceable server-side yet — no mutate-capable SSH
+  key or forced-command mechanism has been provisioned. OpenClaw's own exec-approvals
+  allowlist is host-exec only and cannot gate SSH-remote command strings either. The
+  AGENT.md documents the strict, currently self-policed allowlist with 6 categories
+  (A–F) plus a permanent blacklist. See `ops/infra-ops/AGENT.md`.
+- **No separate WhatsApp / bindings**: infra-ops has no `bindings[]` entry. It is
+  spawned by the main dispatcher via `sessions_spawn(agentId: ...)`.
+- **heartbeat.every: "0m"**: Already present in the initial proposal. Confirmed
+  as correct — no proactive/cron mode.
+- **Permanent blacklist**: The proposed tools.deny is unchanged, but the AGENT.md
+  now documents a non-negotiable permanent blacklist of operations that no
+  confirmation can unlock (rm -rf, DROP DATABASE, firewall/DNS changes, package
+  removal, chmod/chown on system-critical paths, etc.).
+- **No GitOps requirement**: Confirmed — operational actions are direct. The
+  AGENT.md explicitly states this.
+
+```json5
+{
+  id: "infra-ops",
+  name: "Infrastructure Operations Agent",
+  workspace: "/Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/ops/infra-ops",
+  agentDir: "~/.openclaw/agents/infra-ops/agent",
+  model: {
+    primary: "9router/oc/deepseek-v4-flash-free",
+    fallbacks: [
+      "9router/cc/claude-sonnet-5",
+      "9router/kr/claude-haiku-4.5"
+    ]
+  },
+  utilityModel: "lmstudio/qwen/qwen3.5-9b",
+  skills: [],
+  sandbox: {
+    mode: "off"
+  },
+  tools: {
+    profile: "coding",
+    allow: [
+      "read",
+      "web_search",
+      "web_fetch",
+      "exec",
+      "process",
+      "sessions_list",
+      "sessions_send",
+      "session_status",
+      "memory_search",
+      "memory_get",
+      "edit",
+      "apply_patch",
+      "write"
+    ],
+    deny: [
+      "gateway",
+      "cron",
+      "browser",
+      "canvas",
+      "image",
+      "image_generate",
+      "music_generate",
+      "video_generate",
+      "tts",
+      "nodes",
+      "discord",
+      "telegram",
+      "slack",
+      "whatsapp",
+      "message",
+      "create_goal",
+      "update_goal",
+      "update_plan",
+      "skill_workshop"
+    ],
+    elevated: {
+      enabled: false
+    }
+  },
+  // No heartbeat — on-demand only. No bindings — spawned via sessions_spawn.
+  heartbeat: {
+    every: "0m"
+  },
+  identity: {
+    name: "InfraOps",
+    emoji: "🔧"
+  },
+  subagents: {
+    allowAgents: [],
+    maxConcurrent: 0
+  },
+  contextInjection: "continuation-skip",
+  contextLimits: {
+    memoryGetMaxChars: 6000,
+    memoryGetDefaultLines: 60,
+    toolResultMaxChars: 32000
+  },
+  bootstrapMaxChars: 8000,
+  bootstrapTotalMaxChars: 24000
+}
+```
 
 ---
 

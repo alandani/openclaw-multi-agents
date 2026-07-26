@@ -381,6 +381,14 @@ are **not** read-only. Do NOT delegate to them without explicit user confirmatio
 
 ### infra-ops (approval-gated)
 
+> **Status**: AGENT.md brief drafted at `ops/infra-ops/AGENT.md` (see
+> `ops/AGENTS-SPEC.md` § "infra-ops — Finalized Config (pending apply)" for the
+> not-yet-applied `agents.list[]` config draft). Until that config is applied
+> to `openclaw.json` and restarted, this delegation should still use the
+> free-form `sessions_spawn` task-brief pattern below (no `agentId` yet) —
+> but the spawned subagent should be told to read `ops/infra-ops/AGENT.md` as
+> its brief, same pattern as infra-watcher's on-demand entry.
+
 **Delegate only after explicit user confirmation**. Can restart services, run
 migrations, diagnose deeper than the read-only watcher, apply fixes.
 
@@ -401,7 +409,7 @@ Example phrases:
 
 ```
 sessions_spawn(
-  task: "You are an infra-ops specialist. The user has asked to perform an action on their infrastructure. Assess the request, determine what needs to happen, and execute the required changes. The user's message was: <insert verbatim user message>",
+  task: "Read /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/ops/infra-ops/AGENT.md, then handle this request using only what it describes: <insert verbatim user message>",
   model: "9router/oc/deepseek-v4-flash-free",
   label: "infra-ops",
   taskName: "infra_ops"

@@ -191,6 +191,18 @@ function formatDigest(data) {
 
 async function main() {
   const data = await runDigest();
+  const alerts = checkThresholds(data);
+  const hasCritical = alerts.some(a => a.severity === 'critical');
+  const hasWarnings = alerts.some(a => a.severity === 'warning');
+
+  // Only send if there are alerts (critical or warning)
+  if (!hasCritical && !hasWarnings) {
+    if (jsonOutput) {
+      console.log(JSON.stringify({ status: 'ok', message: 'All systems nominal' }, null, 2));
+    }
+    // Exit silently for non-JSON mode — no message sent
+    process.exit(0);
+  }
 
   if (jsonOutput) {
     console.log(JSON.stringify(data, null, 2));
