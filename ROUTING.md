@@ -381,13 +381,8 @@ are **not** read-only. Do NOT delegate to them without explicit user confirmatio
 
 ### infra-ops (approval-gated)
 
-> **Status**: AGENT.md brief drafted at `ops/infra-ops/AGENT.md` (see
-> `ops/AGENTS-SPEC.md` § "infra-ops — Finalized Config (pending apply)" for the
-> not-yet-applied `agents.list[]` config draft). Until that config is applied
-> to `openclaw.json` and restarted, this delegation should still use the
-> free-form `sessions_spawn` task-brief pattern below (no `agentId` yet) —
-> but the spawned subagent should be told to read `ops/infra-ops/AGENT.md` as
-> its brief, same pattern as infra-watcher's on-demand entry.
+**Status**: ✅ Deployed — `agents.list[]` entry applied to `openclaw.json` and live.
+Use `agentId: "infra-ops"` for direct agent delegation.
 
 **Delegate only after explicit user confirmation**. Can restart services, run
 migrations, diagnose deeper than the read-only watcher, apply fixes.
@@ -409,13 +404,11 @@ Example phrases:
 
 ```
 sessions_spawn(
-  task: "Read /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/ops/infra-ops/AGENT.md, then handle this request using only what it describes: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
-  label: "infra-ops",
-  taskName: "infra_ops"
+  agentId: "infra-ops",
+  task: "<insert verbatim user message>"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+Fallback model chain: deepseek-v4-flash-free → claude-sonnet-5 → claude-haiku-4.5 (configured in openclaw.json).
 
 > **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
