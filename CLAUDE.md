@@ -40,6 +40,18 @@ OpenClaw answers → user
 - No config change needed (stays at OpenClaw's default `maxSpawnDepth: 1`)
 - Can be revisited later if a concrete case emerges where a coding specialist genuinely needs to decompose into sub-work it can't do inline — at that point, raising `maxSpawnDepth` to 2 (plus likely tuning `maxChildrenPerAgent`) would be a one-line config patch, not a redesign
 
+## Architecture decision — DECIDED: app-dev remains generalist (no stack-specific specialists)
+
+**Do NOT split app-dev into stack-specific subagents (Python/Django, PHP/Laravel, Dart/Flutter, JS/React, AI/ML).** Keep one generalist app-dev agent.
+
+**Rationale:**
+- Avoids routing ambiguity — "build me an app" would require upfront disambiguation ("which stack?") before routing, violating ROUTING.md's hard rule: "never delegate uncertainty"
+- Stack is task detail, not a routing axis — the user's message ("build a Django app") already contains the stack; the app-dev task-brief forwards the verbatim user message, so app-dev knows what to build
+- Split only if/when evidence emerges (e.g., DeepSeek Flash struggles with Laravel patterns, or a stack needs dedicated tooling like baked-in artisan CLI) — capability gaps, not naming gaps
+- Consistent with the "coding cluster stays flat" decision above
+
+**Future improvement (noted, not yet applied):** Update app-dev's task template to explicitly prompt for stack if the user didn't specify one (e.g., user says "build me a web app" → app-dev asks "Django, Laravel, Next.js, etc.?" before proceeding). Low priority — apply only once this becomes a real friction point.
+
 ## Architecture decision — DECIDED: Skill Workshop migration deferred
 
 **The plain-markdown-file pattern (specialist briefs like `watchers/infra-watcher/AGENT.md`, referenced by literal file path in `sessions_spawn` task text) stays as-is for now. Skill Workshop conversion is deferred, not rejected — it will only be revisited once the roster has grown past the current 1 built specialist (infra-watcher) and hand-maintaining plain markdown files actually becomes a real pain point in practice.**
