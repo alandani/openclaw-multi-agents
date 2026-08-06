@@ -12,18 +12,34 @@ that acts on servers is a separate, not-yet-built agent (infra-ops).
 
 ## What lives here
 
-Currently just this README. The actual integration points are:
-- **Vultr MCP** (community server) and **Hostinger MCP** (official) — connected
-  directly to OpenClaw, scoped read-only. Configured on the Mac Mini
-  (OpenClaw's MCP server config), not in this repo.
-- **WHOIS lookup** — for domain expiry, provider-agnostic.
-- **SSH** (read-only commands only) — for cPanel checks and Vultr resource %,
-  per-instance, keyed off `instances.json` (gitignored; see
-  `instances.example.json` at repo root).
+All four integration points are built and live. Full operating detail
+(tool names, thresholds, when to use which) is in [AGENT.md](AGENT.md) —
+this README only covers what's in the folder:
+- **Vultr MCP** (community server) — connected, read-only, 145 tools
+  (billing, DNS, firewall, etc.). Instance list/status has no MCP tool in
+  this package version, so `vultr-status.mjs` calls the API directly instead.
+- **Hostinger MCP** (official) — connected, read-only, 50 tools (VPS metrics,
+  hosting, WordPress, mail).
+- **WHOIS lookup** — `domain-check.mjs`, provider-agnostic, reads
+  `domains.json` at the repo root.
+- **SSH** (read-only, forced-command restricted) — deployed and verified on
+  all 5 servers via `remote/deploy-all.sh`; see `remote/DEPLOYMENT.md` for
+  the deploy/verify tooling and `remote/readonly-check.sh` for the restricted
+  remote-side script.
 
-As pieces get built (Vultr MCP connected, Hostinger MCP connected, WHOIS
-capability, SSH wiring) they'll land here as config/docs specific to this
-agent. See CLAUDE.md's "Current status / next steps" for the build order.
+Both MCP servers are configured on the Mac Mini (OpenClaw's MCP server
+config), not in this repo.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `AGENT.md` | Full operating instructions for the agent (tool names, thresholds, daily digest logic) |
+| `daily-digest.mjs` | Runs once a day via the `infra-watcher-daily` cron job, produces one combined WhatsApp summary |
+| `domain-check.mjs` | WHOIS-based domain expiry check across `domains.json` |
+| `vultr-status.mjs` | Vultr instance list/status (API fallback, no MCP tool for this) |
+| `test-threshold.mjs`, `production-test.mjs` | Test scripts |
+| `remote/` | SSH key deployment + verification tooling, and the restricted remote-side script |
 
 ## Example questions this agent should answer
 

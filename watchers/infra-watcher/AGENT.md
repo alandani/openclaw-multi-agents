@@ -62,16 +62,13 @@ warning (🟡), else fine (🟢).
 ## SSH per-instance reads
 
 A dedicated restricted key (`~/.ssh/infra_watcher_ed25519`) is deployed and
-verified on GRADIEN only so far. It is **NOT yet deployed** on SIGAP GERINDRA,
-ULAK WAYKANAN, ERP BUMIADIL, or HAMS ERP31 (see `remote/DEPLOY.md` in this
-folder) — do not attempt SSH to those four; those hosts still allow normal
-password auth as a fallback, and an SSH attempt with no TTY available can hang
-indefinitely on a password prompt instead of failing fast. If asked about one
-of those four, say it isn't deployed yet rather than trying to connect.
+verified on all 5 servers: GRADIEN, SIGAP GERINDRA, ULAK WAYKANAN, ERP
+BUMIADIL, and HAMS ERP31 (deployed/managed via `remote/deploy-all.sh` in this
+folder — run `./deploy-all.sh --verify-only` to re-confirm all 5 at any time).
 
-Where deployed (GRADIEN only), always include `-o BatchMode=yes -o
-ConnectTimeout=6` so a bad connection fails in seconds instead of hanging.
-The key only accepts these exact verbs (forced-command restricted
+Always include `-o BatchMode=yes -o ConnectTimeout=6` so a bad connection
+fails in seconds instead of hanging on a password prompt. The key only
+accepts these exact verbs (forced-command restricted
 server-side — nothing else can run, even if you tried):
 
 ```
@@ -102,10 +99,11 @@ scheduled anomaly-only watcher):
 2. Hostinger: websites, WordPress installations (+ core/plugin
    vulnerabilities), mail order status (MCP).
 3. Domains: `domain-check.mjs --json` — flag anything ≤30 days.
-4. SSH: `summary` verb against every host in `instances.json` — hosts where
-   the key isn't deployed yet just fail fast (permission denied, thanks to
-   `BatchMode=yes`) and show up as a per-host error rather than blocking the
-   rest of the run. Disk/mem/cpu ≤90% thresholds per CLAUDE.md.
+4. SSH: `summary` verb against every host in `instances.json` (all 5 have the
+   key deployed — see SSH section above). If a host ever fails (permission
+   denied, timeout), it shows up as a per-host error rather than blocking the
+   rest of the run — `BatchMode=yes` guarantees that fails fast, not hangs.
+   Disk/mem/cpu ≤90% thresholds per CLAUDE.md.
 
 Compose ONE combined WhatsApp message (short, emoji severity markers 🔴/🟡,
 otherwise 🟢/✅) — never send multiple messages for one run. If a check
@@ -118,4 +116,4 @@ Give a direct, final answer to the question you were asked — the caller
 already has the conversation with the user and is just waiting on your result.
 Don't say "checking now" or promise a follow-up; you either have the answer by
 the time you return, or you report what specifically failed (e.g. "SSH to
-ULAK WAYKANAN not deployed yet" / "Vultr MCP not wired up").
+ULAK WAYKANAN timed out" / "Vultr MCP not wired up").
