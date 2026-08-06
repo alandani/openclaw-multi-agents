@@ -13,8 +13,7 @@ Deploys a **full-access SSH key** to all your servers that:
 
 | File | Purpose |
 |------|---------|
-| `deploy-all.sh` | Main deployment script (loops through all servers) |
-| `verify-deployment.sh` | Verify all servers have the key deployed correctly |
+| `deploy-all.sh` | Deploys to all servers, and (`--verify-only`) verifies them too |
 | `DEPLOYMENT.md` | This file |
 
 ## Quick Start
@@ -24,8 +23,8 @@ Deploys a **full-access SSH key** to all your servers that:
 cd /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/ops/infra-ops/remote
 ./deploy-all.sh
 
-# Verify deployment worked
-./verify-deployment.sh
+# Verify deployment worked (no changes made)
+./deploy-all.sh --verify-only
 ```
 
 ## Detailed Usage
@@ -42,7 +41,8 @@ cd /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/ops/infra-ops/r
 # Dry-run mode (shows what would happen, doesn't deploy)
 ./deploy-all.sh --verify-only
 
-# Use password for bootstrap (needs sshpass installed)
+# Interactive password bootstrap — ssh prompts you directly at the terminal,
+# once per server; the script never sees, stores, or passes the password
 ./deploy-all.sh --password
 
 # Use a specific key for bootstrap
@@ -59,14 +59,6 @@ cd /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/ops/infra-ops/r
 - 🟢 Green = Success
 - 🔴 Red = Failed
 - 🟡 Yellow = Skipped or warning
-
-### verify-deployment.sh
-
-Tests that the infra-ops key works on each server:
-
-```bash
-./verify-deployment.sh
-```
 
 ## Prerequisites
 
@@ -141,12 +133,13 @@ ssh -i ~/.ssh/infra_ops_ed25519 root@<ip> "echo test"
 
 ## After Deployment
 
-Once infra-ops key is deployed to all servers:
+The infra-ops key is deployed and verified on all 6 servers (GRADIEN, SIGAP
+GERINDRA, ULAK WAYKANAN, ULAK-NEW, ERP BUMIADIL, HAMS ERP31):
 
-1. The infra-ops agent can now perform actions on those servers
+1. The infra-ops agent can perform actions on all of them
 2. All actions still require explicit user confirmation (confirmation gate in AGENT.md)
 3. Actions are logged and reported back to the user
-4. Run `./verify-deployment.sh` regularly to ensure all keys are still working
+4. Run `./deploy-all.sh --verify-only` regularly to ensure all keys are still working
 
 ## Integration with infra-watcher
 
@@ -157,9 +150,9 @@ Both infra-watcher and infra-ops keys can coexist on the same server:
 
 This provides defense-in-depth: if one key is compromised, the other is still scoped to its intended use.
 
-## Next Steps
+## Possible future hardening
 
-1. Run `./deploy-all.sh` to deploy infra-ops key to all servers
-2. Run `./verify-deployment.sh` to confirm
-3. Test infra-ops agent with a real action (e.g., restart a service with user confirmation)
-4. (Future) Deploy forced-command wrapper for SSH-level enforcement of the allowlist
+Deploy a forced-command wrapper for SSH-level enforcement of the allowlist,
+similar to infra-watcher's `readonly-check.sh` — currently the safety
+boundary is agent-level only (confirmation gate + tool scoping in AGENT.md),
+not enforced by sshd itself.

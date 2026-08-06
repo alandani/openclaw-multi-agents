@@ -5,7 +5,7 @@
 #   ./deploy-all.sh                       # deploy to all servers
 #   ./deploy-all.sh --skip-deployed       # skip servers where the key already works
 #   ./deploy-all.sh --verify-only         # dry run: only report current status
-#   ./deploy-all.sh --password            # use sshpass + root password for bootstrap
+#   ./deploy-all.sh --password            # allow interactive root-password bootstrap
 #   ./deploy-all.sh --key ~/.ssh/foo      # use a specific bootstrap key
 #
 # Bootstrap access: to install the key, the script first needs ANY working SSH
@@ -14,7 +14,9 @@
 #   2. the ops key listed for that server in instances.json (if any)
 #   3. keys passed via --key
 #   4. ~/.ssh/id_ed25519, ~/.ssh/id_rsa
-#   5. root password (only with --password, needs sshpass)
+#   5. root password (only with --password) — ssh itself prompts you at the
+#      terminal, once per server; the script never sees, stores, or passes
+#      the password anywhere. See bootstrap_prefix() for how.
 # If none work, that server is reported as FAILED with a hint.
 
 set -eu
@@ -45,20 +47,17 @@ done
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-# --- load ROOT_PASS from repo .env if present (optional convenience) ---
-ENV_FILE="$REPO_ROOT/.env"
-if [[ -f "$ENV_FILE" ]] && [[ -z "${ROOT_PASS:-}" ]]; then
-  ROOT_PASS="$(grep -E '^ROOT_PASS=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
-fi
-
 # --- sanity checks ----------------------------------------------------------
 [[ -f "$INSTANCES_JSON" ]]    || { echo -e "${RED}ERROR: $INSTANCES_JSON not found${NC}"; exit 1; }
 [[ -f "$INFRA_OPS_PUB" ]]     || { echo -e "${RED}ERROR: $INFRA_OPS_PUB not found${NC}"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo -e "${RED}ERROR: jq not installed (brew install jq)${NC}"; exit 1; }
-if [[ "$USE_PASSWORD" -eq 1 ]] && ! command -v sshpass >/dev/null 2>&1; then
-  echo -e "${RED}ERROR: --password needs sshpass. Install: brew install hudochenkov/sshpass/sshpass${NC}"
-  exit 1
-fi
+
+# Control sockets for password-bootstrapped servers live here — one
+# interactive auth per server, reused for its setup steps, closed right
+# after. 700 because anyone who can reach the socket rides the open session.
+CONTROL_DIR="$HOME/.ssh/controlmasters"
+mkdir -p "$CONTROL_DIR"
+chmod 700 "$CONTROL_DIR"
 
 # Public key (full-access, no forced-command restriction for now)
 PUBKEY_BODY="$(cat "$INFRA_OPS_PUB")"
@@ -90,9 +89,11 @@ bootstrap_prefix() { # $1=user $2=ip $3=port $4=ssh_watcher_key $5=ops_key
   # Try existing keys in order of preference
   [[ -n "$ops_key" ]] && keys+=("${ops_key/#\~/$HOME}")
   [[ -n "$ssh_watcher" ]] && keys+=("${ssh_watcher/#\~/$HOME}")
-  for k in "${EXTRA_KEYS[@]}"; do keys+=("${k/#\~/$HOME}"); done
+  # ${arr[@]+"${arr[@]}"} — bash 3.2 (macOS) treats "${arr[@]}" on an empty
+  # array as unbound under `set -u`; this guard expands to nothing instead.
+  for k in ${EXTRA_KEYS[@]+"${EXTRA_KEYS[@]}"}; do keys+=("${k/#\~/$HOME}"); done
   keys+=("$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa")
-  
+
   for k in "${keys[@]}"; do
     [[ -f "$k" ]] || continue
     if ssh -i "$k" -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" true >/dev/null 2>&1; then
@@ -100,19 +101,31 @@ bootstrap_prefix() { # $1=user $2=ip $3=port $4=ssh_watcher_key $5=ops_key
       return 0
     fi
   done
-  
+
   if [[ "$USE_PASSWORD" -eq 1 ]]; then
-    echo "password"
-    return 0
+    # No key worked — fall back to an interactive password login. ssh reads
+    # the password directly from the terminal (never from this script, never
+    # stored anywhere); ControlMaster keeps that one authenticated session
+    # open so the setup steps below reuse it instead of prompting repeatedly.
+    local cpath="$CONTROL_DIR/$user@$ip:$port"
+    echo -e "  ${YELLOW}No key access — enter the root password when prompted (once for this server):${NC}" >&2
+    if ssh -o ControlMaster=yes -o ControlPersist=10m -o ControlPath="$cpath" \
+           -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+           -p "$port" "$user@$ip" true; then
+      echo "ctrl:$cpath"
+      return 0
+    fi
+    return 1
   fi
   return 1
 }
 
-# Run a remote command. $1 = access ("key:/path" or "password"), rest = ssh args style
+# Run a remote command. $1 = access ("key:/path" or "ctrl:/path/to/socket")
 run_remote() { # $1=access $2=user@host $3=port $4=command...
   local access="$1" host="$2" port="$3" cmd="$4"
-  if [[ "$access" == password* ]]; then
-    sshpass -p "$ROOT_PASS" ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "$host" "$cmd"
+  if [[ "$access" == ctrl:* ]]; then
+    local cpath="${access#ctrl:}"
+    ssh -o ControlPath="$cpath" -p "$port" "$host" "$cmd"
   else
     local key="${access#key:}"
     ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "$host" "$cmd"
@@ -121,8 +134,9 @@ run_remote() { # $1=access $2=user@host $3=port $4=command...
 
 run_scp() { # $1=access $2=user@host $3=port $4=src $5=dst
   local access="$1" host="$2" port="$3" src="$4" dst="$5"
-  if [[ "$access" == password* ]]; then
-    sshpass -p "$ROOT_PASS" scp -o StrictHostKeyChecking=accept-new -P "$port" "$src" "$host:$dst"
+  if [[ "$access" == ctrl:* ]]; then
+    local cpath="${access#ctrl:}"
+    scp -o ControlPath="$cpath" -P "$port" "$src" "$host:$dst"
   else
     local key="${access#key:}"
     scp -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$port" "$src" "$host:$dst"
@@ -169,18 +183,15 @@ for entry in "${SERVERS[@]}"; do
   ACCESS="$(bootstrap_prefix "$user" "$ip" "$port" "$ssh_watcher" "$ops_key" || true)"
   if [[ -z "$ACCESS" ]]; then
     echo -e "  ${RED}✗ no existing SSH access to this server${NC}"
-    echo -e "    ${YELLOW}Hints: run with --password (needs root password + sshpass), add your own key to this server first, or use the Vultr web console.${NC}"
+    echo -e "    ${YELLOW}Hints: run with --password (you'll be prompted, interactively, at the terminal), add your own key to this server first, or use the Vultr web console.${NC}"
     error_count=$((error_count + 1))
     RESULTS+=("FAIL|$name (no bootstrap access)")
     echo ""
     continue
   fi
-  
-  if [[ "$ACCESS" == password* ]]; then
-    if [[ -z "${ROOT_PASS:-}" ]]; then
-      read -s -p "  Root password for $user@$ip: " ROOT_PASS; echo ""
-    fi
-    echo -e "  ${YELLOW}  bootstrap: root password (from .env or prompt)${NC}"
+
+  if [[ "$ACCESS" == ctrl:* ]]; then
+    echo -e "  ${YELLOW}  bootstrap: interactive password (authenticated session reused for this server only)${NC}"
   else
     echo -e "  ${YELLOW}  bootstrap: ${ACCESS#key:}${NC}"
   fi
@@ -226,6 +237,13 @@ for entry in "${SERVERS[@]}"; do
     error_count=$((error_count + 1))
     RESULTS+=("FAIL|$name (deploy incomplete)")
   fi
+
+  # close the interactive session immediately rather than waiting out
+  # ControlPersist — don't leave an authenticated root socket lying around
+  if [[ "$ACCESS" == ctrl:* ]]; then
+    ssh -O exit -o ControlPath="${ACCESS#ctrl:}" -p "$port" "$HOST" >/dev/null 2>&1 || true
+  fi
+
   echo ""
 done
 
