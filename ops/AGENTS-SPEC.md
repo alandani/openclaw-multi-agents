@@ -503,11 +503,17 @@ either agent can be built:
    the exec-approvals system would provide hard enforcement for `exec`.
 
    **RESOLVED** — strict allowlist with 6 categories (A-F) documented in
-   `ops/infra-ops/AGENT.md` § "SSH Command Allowlist". Currently **self-policed**
-   (no server-side forced-command enforcement exists yet — that's a separate,
-   not-yet-made infrastructure decision; see AGENT.md § "Current SSH key situation").
-   See AGENT.md for the full allowlist and § "Permanent Blacklist" for the
-   corresponding forbidden list.
+   `ops/infra-ops/AGENT.md` § "SSH Command Allowlist". A server-side
+   forced-command wrapper (`ops/infra-ops/remote/ops-check.sh`) now exists,
+   covering Category A (read-only) and B (service/container restart-reload)
+   with real enforcement — injection-safe argument validation, not just
+   agent self-policing. It's deployed on a per-server, toggleable basis (see
+   `remote/DEPLOYMENT.md`); Categories C-F remain self-policed everywhere
+   until they have a safe parameterized form. Check `instances.json`'s
+   `_ops_note` per server for current restriction status — it changes as
+   servers get toggled for specific tasks (e.g. left open during a
+   migration). See AGENT.md § "Current SSH key situation" for the full
+   model, and § "Permanent Blacklist" for the corresponding forbidden list.
 
 2. **Separate WhatsApp or same dispatcher?**: Should infra-ops's confirmation and
    results go back through the main dispatcher (current design), or should it have its
@@ -598,7 +604,7 @@ remain open and are untouched here.
 
 | # | Question | Resolution | Rationale |
 |---|----------|-----------|-----------|
-| 1 | SSH command allowlist | **Strict, self-policed command allowlist** (6 categories, A–F, plus a permanent blacklist) documented in `ops/infra-ops/AGENT.md`. No mutate-capable SSH key or server-side enforcement exists yet — provisioning one is a separate, not-yet-made decision. | Matches the spirit of infra-watcher's forced-command pattern (`readonly-check.sh`), but server-side enforcement wasn't part of this task's scope — the allowlist below is the working boundary until that infrastructure is designed and built deliberately. |
+| 1 | SSH command allowlist | **Strict command allowlist** (6 categories, A–F, plus a permanent blacklist) documented in `ops/infra-ops/AGENT.md`. A mutate-capable key (`infra_ops_ed25519`) is deployed and verified on all 6 servers. Server-side enforcement (`ops-check.sh`, matching infra-watcher's forced-command pattern) exists and covers Categories A+B — deployed on a per-server toggleable basis, off where a task needs the full toolset (e.g. during a migration). Categories C–F remain self-policed everywhere. | Matches the spirit of infra-watcher's forced-command pattern (`readonly-check.sh`); server-side enforcement for the common actions (status checks, restarts) is real now, with the harder-to-parameterize categories deliberately deferred rather than either fully open or fully blocked. |
 | 2 | Separate WhatsApp or same dispatcher? | **Same dispatcher** — results go back through the main dispatcher via `sessions_spawn`. No dedicated ops WhatsApp channel. | infra-ops is an on-demand agent like all others in the roster; adding a dedicated channel adds complexity without a demonstrated need. Results go through the existing ack+relay pattern. |
 | 3 | Cron schedule needed? | **No heartbeat** (`every: "0m"`). Purely on-demand. | infra-ops is action-oriented (restart, deploy, migrate) — not a periodic status check. Proactive alerts ("check Nginx on all servers every morning") are best handled by the read-only infra-watcher instead; infra-ops only gets involved when infra-watcher finds something that needs fixing. |
 | 4 | Destructive-operation blacklist | **Confirmed as listed in the existing draft**: `rm -rf`, `DROP DATABASE`/`DROP TABLE`/unscoped `DELETE`, `docker system prune -a`. **Additional**: firewall and DNS changes are entirely out of scope — they stay manual via provider dashboards. | These operations are data-loss or high-blast-radius events that no agent should perform. The blacklist is documented in `ops/infra-ops/AGENT.md` (the "never allowed" section) and enforced by tool scoping. Firewall/DNS are out because they affect availability/security globally and require provider-dashboard access anyway. |
@@ -622,12 +628,12 @@ When the open questions above are resolved, the implementation order should be:
 7. **Test the confirmation gate** — verify the agent actually waits before mutating
 8. **Test live** — run a real restart / send a real invoice (with user watching)
 
-## infra-ops — Finalized Config (pending apply)
+## infra-ops — Finalized Config (applied)
 
 This section records the finalized `agents.list[]` config entry for infra-ops,
 reflecting the 5 resolved decisions from the Open Questions section above.
-**This is a draft for review — do NOT copy into `openclaw.json` until the human
-operator has reviewed and confirmed.**
+**This has been applied to `openclaw.json`** (agent id `infra-ops`, live under
+`agents.list[]`).
 
 Key differences from the spec's initial proposal (see § "b) Proposed Config
 Entry" above):

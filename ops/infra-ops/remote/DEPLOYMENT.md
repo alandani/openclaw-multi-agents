@@ -150,25 +150,30 @@ Both infra-watcher and infra-ops keys can coexist on the same server:
 
 This provides defense-in-depth: if one key is compromised, the other is still scoped to its intended use.
 
-## Forced-command wrapper (built, off by default)
+## Forced-command wrapper (built, toggleable per server)
 
 `remote/ops-check.sh` is a forced-command wrapper for SSH-level enforcement,
 built the same way as infra-watcher's `readonly-check.sh` — arguments are
 split via plain word-splitting (never `eval`/`sh -c`) and validated against
 a strict charset before being passed as real argv elements, so injection
 isn't possible regardless of input. It covers `AGENT.md` Category A
-(read-only) and the Category B restart/reload actions.
+(read-only) and the Category B restart/reload actions. Categories C–F
+(deploy, database/WordPress, package install, file transfer) aren't
+implemented in the wrapper — turning it on for a server hard-blocks those
+at the SSH layer for that server, so it's toggled per server as needed
+rather than applied everywhere permanently.
 
-**It's deliberately not deployed by default.** Turning it on narrows the
-infra-ops key to only those actions — Categories C–F (deploy, database/
-WordPress, package install, file transfer) would be hard-blocked at the SSH
-layer. Until now, the safety boundary has been agent-level only
-(confirmation gate + tool scoping in `AGENT.md`), not enforced by sshd.
+**Current live status is tracked in `instances.json`**, per server, in each
+entry's `_ops_note` field (that file is gitignored — real state, not
+committed — so it's the actual source of truth, not this doc). As of
+2026-08-07: SIGAP GERINDRA, ERP BUMIADIL, and HAMS ERP31 are restricted;
+ULAK WAYKANAN, ULAK-NEW, and GRADIEN are full-access (left open to support
+the ULAK -> ULAK-NEW migration that weekend). Don't trust a stale copy of
+this status in your head — check `instances.json` or run the probe below.
 
-Toggle it with `shared/sync-forced-command.mjs` (repo root), which replaces
+Toggle with `shared/sync-forced-command.mjs` (repo root), which replaces
 the same key's `authorized_keys` line either way — safe to switch back and
-forth as needed (e.g. off for a task needing the full toolset like a server
-migration, on again afterward):
+forth as needed:
 
 ```bash
 # Turn ON — restrict the key to ops-check.sh's allowlist
@@ -176,14 +181,50 @@ node shared/sync-forced-command.mjs \
   --script ops/infra-ops/remote/ops-check.sh \
   --pubkey ~/.ssh/infra_ops_ed25519.pub \
   --remote-path /opt/infra-ops/ops-check.sh \
-  --key-comment infra-ops@mac-mini
+  --key-comment infra-ops@mac-mini \
+  --only "<server name>"
 
 # Turn OFF — revert to full access
 node shared/sync-forced-command.mjs \
   --pubkey ~/.ssh/infra_ops_ed25519.pub \
   --key-comment infra-ops@mac-mini \
-  --unrestricted
+  --unrestricted \
+  --only "<server name>"
 ```
 
-Add `--dry-run` to preview either command first, or `--only <name>` to
-target a single server (e.g. `--only GRADIEN`).
+Add `--dry-run` to preview either command first. Drop `--only` to target
+all 6 at once. After toggling, update that server's `_ops_note` in
+`instances.json` to match — it's manual, nothing keeps it in sync
+automatically.
+
+**Quick live probe** (bypasses whatever `instances.json` currently says):
+
+```bash
+ssh -i ~/.ssh/infra_ops_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes \
+  -o ConnectTimeout=6 root@<ip> "echo probe"
+# "probe" back  -> full access
+# "rejected: ..." back -> restricted
+```
+
+### Gotcha: a restricted key can't unrestrict itself
+
+If `ops-check.sh` is already on for a server, running the `--unrestricted`
+command above will fail — the tool needs to run a plain shell command to
+edit `authorized_keys`, and the restricted key rejects that command the
+same as it would reject anything else outside its allowlist. This is
+correct behavior, not a bug, but it means recovery needs a *different*
+credential:
+
+- If another unrestricted key exists on that server (e.g. a bootstrap key),
+  use `-i` with `-o IdentitiesOnly=yes` to force `sync-forced-command.mjs`'s
+  underlying `ssh` calls to use it instead of whatever `ssh-agent` offers.
+- Otherwise, fall back to the root password directly:
+  `ssh -o PubkeyAuthentication=no root@<ip>` (add this flag even if you
+  think no key would match — `ssh-agent` offers loaded identities
+  automatically, including a restricted one, before falling through to
+  password). Once in, manually edit `authorized_keys`: strip the line for
+  the infra-ops key's blob, re-add it as a bare `ssh-ed25519 AAAA...
+  infra-ops@mac-mini` line with no `command=` prefix.
+- Also double-check `ssh-add -l` doesn't still have the restricted key
+  loaded from a previous session — `ssh-add -d ~/.ssh/infra_ops_ed25519`
+  removes it so plain `ssh root@<ip>` doesn't silently pick it up again.

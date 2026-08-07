@@ -27,9 +27,13 @@ Two SSH keys exist:
 - `~/.ssh/infra_watcher_ed25519` — **read-only**, used by infra-watcher (forced-command restricted to `disk`/`mem`/`cpu`/`cpanel`/`summary` verbs — see `watchers/infra-watcher/remote/readonly-check.sh`).
 - `~/.ssh/infra_ops_ed25519` — **your key**, deployed and verified on all 6 servers in `instances.json` (GRADIEN, SIGAP GERINDRA, ULAK WAYKANAN, ULAK-NEW, ERP BUMIADIL, HAMS ERP31). Check `instances.json` for exact host/port per server.
 
-**Your key is currently full-access, not server-side restricted.** No forced-command wrapper is active on the servers for this key — the SSH Command Allowlist below is **self-policed only**, same as described in "OpenClaw Exec-Approval Mechanism". You genuinely can run any command your key's access permits; the allowlist, blacklist, and confirmation gate in this file are the only thing standing between you and something destructive. Follow them exactly, every time — there is no OS-level backstop catching a mistake right now.
+**Restriction status is per-server, not uniform — check before you rely on either assumption.** A server-side forced-command wrapper (`ops-check.sh` — read-only diagnostics + service/container restart-reload, same injection-safe design as `readonly-check.sh`) exists and is deployed on *some* servers, not others — it's toggled per server depending on what that server needs at the time (e.g. left off during a migration). **`instances.json`'s `_ops_note` per server is the source of truth for current status** — read it before assuming either way. As of 2026-08-07: SIGAP GERINDRA, ERP BUMIADIL, and HAMS ERP31 are restricted to the wrapper's allowlist; ULAK WAYKANAN, ULAK-NEW, and GRADIEN are full-access. That will keep changing — trust `instances.json`, not this sentence, if it's been a while.
 
-A server-side forced-command wrapper (`ops-check.sh` — read-only diagnostics + service/container restart-reload, same injection-safe design as `readonly-check.sh`) has been built and tested, but is **deliberately not deployed yet** — turning it on would hard-block anything outside its allowlist (deploy/update, database/WordPress, package install, file transfer — AGENT.md Categories C–F), which is too narrow for real ops work like a server migration. It'll be deployed once those categories have a safe parameterized form too. See `remote/ops-check.sh` and `remote/DEPLOYMENT.md`.
+On a **restricted** server, the wrapper enforces Category A+B at the SSH layer regardless of what you attempt — Categories C–F (deploy, database/WordPress, package install, file transfer) are hard-blocked there, full stop, not just self-policed.
+
+On a **full-access** server, nothing server-side stops you — the SSH Command Allowlist below is **self-policed only**, same as described in "OpenClaw Exec-Approval Mechanism". You genuinely can run any command your key's access permits there; the allowlist, blacklist, and confirmation gate in this file are the only thing standing between you and something destructive. Follow them exactly, every time — there is no OS-level backstop catching a mistake on those servers.
+
+See `remote/ops-check.sh` and `remote/DEPLOYMENT.md` for how the wrapper works and how to toggle it.
 
 **Do not fake an SSH action.** If you lack access to a server not in `instances.json`, say so. Do not fabricate a result, do not attempt a workaround, and do not try to SSH with an unrelated or unauthorized key.
 
@@ -191,8 +195,8 @@ The OpenClaw exec-approvals system (`docs/tools/exec-approvals.md`) provides a p
 
 For infra-ops specifically, this means there is currently **no OpenClaw-enforced, command-pattern-level hard boundary** for what you can run once SSH'd into a server:
 - **Host-level**: OpenClaw's exec allowlist can restrict which host commands you run (e.g., the `ssh` binary call pattern), but this is secondary and does not inspect the remote command string
-- **Server-level**: a forced-command wrapper exists (`ops-check.sh`) but is not deployed yet — deploying it would narrow you to its allowlist (see "Current SSH key situation" above for why that's deliberately deferred). Until it's turned on, your key is full-access with no server-side enforcement.
-- **Self-policing**: until the wrapper is deployed, the allowlist in this file is what you must follow as self-discipline — the only real backstop right now
+- **Server-level**: a forced-command wrapper (`ops-check.sh`) exists and is deployed on *some* servers, not others — check `instances.json`'s `_ops_note` per server (see "Current SSH key situation" above)
+- **Self-policing**: on any server where the wrapper isn't deployed, the allowlist in this file is what you must follow as self-discipline — the only real backstop on those servers right now
 
 Your `tools.allow`/`tools.deny` in the config entry provides the binary tool boundary (can you call `exec` at all? Can you call `write`?) — that is the one hard, OpenClaw-enforced boundary that currently exists for this agent.
 
