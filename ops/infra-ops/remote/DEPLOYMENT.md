@@ -150,9 +150,40 @@ Both infra-watcher and infra-ops keys can coexist on the same server:
 
 This provides defense-in-depth: if one key is compromised, the other is still scoped to its intended use.
 
-## Possible future hardening
+## Forced-command wrapper (built, off by default)
 
-Deploy a forced-command wrapper for SSH-level enforcement of the allowlist,
-similar to infra-watcher's `readonly-check.sh` — currently the safety
-boundary is agent-level only (confirmation gate + tool scoping in AGENT.md),
-not enforced by sshd itself.
+`remote/ops-check.sh` is a forced-command wrapper for SSH-level enforcement,
+built the same way as infra-watcher's `readonly-check.sh` — arguments are
+split via plain word-splitting (never `eval`/`sh -c`) and validated against
+a strict charset before being passed as real argv elements, so injection
+isn't possible regardless of input. It covers `AGENT.md` Category A
+(read-only) and the Category B restart/reload actions.
+
+**It's deliberately not deployed by default.** Turning it on narrows the
+infra-ops key to only those actions — Categories C–F (deploy, database/
+WordPress, package install, file transfer) would be hard-blocked at the SSH
+layer. Until now, the safety boundary has been agent-level only
+(confirmation gate + tool scoping in `AGENT.md`), not enforced by sshd.
+
+Toggle it with `shared/sync-forced-command.mjs` (repo root), which replaces
+the same key's `authorized_keys` line either way — safe to switch back and
+forth as needed (e.g. off for a task needing the full toolset like a server
+migration, on again afterward):
+
+```bash
+# Turn ON — restrict the key to ops-check.sh's allowlist
+node shared/sync-forced-command.mjs \
+  --script ops/infra-ops/remote/ops-check.sh \
+  --pubkey ~/.ssh/infra_ops_ed25519.pub \
+  --remote-path /opt/infra-ops/ops-check.sh \
+  --key-comment infra-ops@mac-mini
+
+# Turn OFF — revert to full access
+node shared/sync-forced-command.mjs \
+  --pubkey ~/.ssh/infra_ops_ed25519.pub \
+  --key-comment infra-ops@mac-mini \
+  --unrestricted
+```
+
+Add `--dry-run` to preview either command first, or `--only <name>` to
+target a single server (e.g. `--only GRADIEN`).

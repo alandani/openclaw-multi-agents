@@ -10,7 +10,7 @@
 // about running this for one agent touches the other agent's key or script
 // on the server.
 //
-// Usage:
+// Usage (turn restriction ON — deploy a forced-command script + key):
 //   node shared/sync-forced-command.mjs \
 //     --script watchers/infra-watcher/remote/readonly-check.sh \
 //     --pubkey ~/.ssh/infra_watcher_ed25519.pub \
@@ -23,6 +23,19 @@
 //     --remote-path /opt/infra-ops/ops-check.sh \
 //     --key-comment infra-ops@mac-mini
 //
+// Usage (turn restriction OFF — revert the same key to full access):
+//   node shared/sync-forced-command.mjs \
+//     --pubkey ~/.ssh/infra_ops_ed25519.pub \
+//     --key-comment infra-ops@mac-mini \
+//     --unrestricted
+//
+// These two are meant to be toggled back and forth on the same key — e.g.
+// go --unrestricted before a task that needs the full toolset (a server
+// migration), then re-run the first form afterward to restore the
+// forced-command restriction. Both forms replace the SAME authorized_keys
+// line (matched by key material, not by comment or restriction state), so
+// re-running either one always leaves exactly one line for this key.
+//
 // Optional:
 //   --only <name>     only sync the instances.json entry with this "name"
 //                      (repeatable: --only foo --only bar)
@@ -30,16 +43,19 @@
 //   --instances-file  path to instances.json (default: repo root instances.json)
 //
 // What it does per server (idempotent — safe to re-run after editing the
-// script or adding a server):
-//   1. scp the script to <remote-path> (always overwrites — this is how you
-//      "update the verb list": edit the local script, re-run this tool)
-//   2. chmod 755 it
-//   3. ensure exactly one authorized_keys line exists for this pubkey, with
-//      the command="<remote-path>",no-port-forwarding,... restriction —
-//      replaces a stale line for the same key if the remote-path changed,
-//      never touches other keys' lines (including the other agent's)
-//   4. verify by running the deployed script with no args (should return
-//      whatever the script's default verb produces, not an error)
+// script, toggling restriction on/off, or adding a server):
+//   1. (skipped in --unrestricted mode) scp the script to <remote-path>
+//      (always overwrites — this is how you "update the verb list": edit
+//      the local script, re-run this tool), then chmod 755 it
+//   2. ensure exactly one authorized_keys line exists for this pubkey —
+//      restricted (command="<remote-path>",no-port-forwarding,...) or, in
+//      --unrestricted mode, the bare key with no restriction at all —
+//      replaces any prior line for the same key, never touches other keys'
+//      lines (including the other agent's)
+//   3. verify: restricted mode runs the deployed script with no args
+//      (should return whatever the script's default verb produces, not an
+//      error); --unrestricted mode runs a literal `echo` since there's no
+//      forced-command to fall back on
 //
 // What it deliberately does NOT do:
 //   - does not generate keypairs (ssh-keygen is a manual, one-time step —
@@ -62,6 +78,7 @@ function parseArgs(argv) {
     else if (a === "--key-comment") args.keyComment = argv[++i];
     else if (a === "--only") args.only.push(argv[++i]);
     else if (a === "--dry-run") args.dryRun = true;
+    else if (a === "--unrestricted") args.unrestricted = true;
     else if (a === "--instances-file") args.instancesFile = argv[++i];
     else if (a === "--help" || a === "-h") args.help = true;
     else {
@@ -89,7 +106,7 @@ function shQuote(s) {
 
 function usage() {
   console.log(`
-Usage:
+Usage (turn restriction ON):
   node shared/sync-forced-command.mjs \\
     --script <path-to-local-script> \\
     --pubkey <path-to-local-.pub-file> \\
@@ -97,27 +114,37 @@ Usage:
     --key-comment <comment-suffix-for-authorized_keys>
     [--only <instance-name>]... [--dry-run] [--instances-file <path>]
 
+Usage (turn restriction OFF — revert to full access):
+  node shared/sync-forced-command.mjs \\
+    --pubkey <path-to-local-.pub-file> \\
+    --key-comment <comment-suffix-for-authorized_keys> \\
+    --unrestricted
+    [--only <instance-name>]... [--dry-run] [--instances-file <path>]
+
 Deploys the given forced-command script to every server in instances.json
 (or just the ones named via --only), and wires the given public key into
-authorized_keys restricted to that script. Safe to re-run.
+authorized_keys restricted to that script. Safe to re-run. Pass
+--unrestricted (no --script/--remote-path needed) to replace the same key's
+line with an unrestricted one instead, toggling it back to full access.
 `);
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help || !args.script || !args.pubkey || !args.remotePath || !args.keyComment) {
+  const missingRestricted = !args.unrestricted && (!args.script || !args.remotePath);
+  if (args.help || !args.pubkey || !args.keyComment || missingRestricted) {
     usage();
     process.exit(args.help ? 0 : 1);
   }
 
   const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-  const scriptPath = path.resolve(repoRoot, args.script);
+  const scriptPath = args.unrestricted ? null : path.resolve(repoRoot, args.script);
   const pubkeyPath = expandHome(args.pubkey);
   const instancesPath = args.instancesFile
     ? path.resolve(args.instancesFile)
     : path.join(repoRoot, "instances.json");
 
-  if (!existsSync(scriptPath)) {
+  if (scriptPath && !existsSync(scriptPath)) {
     console.error(`Script not found: ${scriptPath}`);
     process.exit(1);
   }
@@ -138,10 +165,11 @@ function main() {
   // trailing comment duplicated alongside --key-comment.
   const [keyType, keyBlob] = pubkeyRaw.split(/\s+/);
   const pubkeyContent = `${keyType} ${keyBlob}`;
-  const remoteDir = path.posix.dirname(args.remotePath);
-  const authorizedKeysLine =
-    `command="${args.remotePath}",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ` +
-    `${pubkeyContent} ${args.keyComment}`;
+  const remoteDir = scriptPath ? path.posix.dirname(args.remotePath) : null;
+  const authorizedKeysLine = args.unrestricted
+    ? `${pubkeyContent} ${args.keyComment}`
+    : `command="${args.remotePath}",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ` +
+      `${pubkeyContent} ${args.keyComment}`;
 
   const targets = args.only.length
     ? instances.filter((i) => args.only.includes(i.name))
@@ -160,7 +188,10 @@ function main() {
     process.exit(1);
   }
 
-  console.log(`Syncing ${scriptPath} -> ${args.remotePath} on ${targets.length} server(s)${args.dryRun ? " [DRY RUN]" : ""}\n`);
+  const action = args.unrestricted
+    ? `Removing forced-command restriction (reverting to full access)`
+    : `Syncing ${scriptPath} -> ${args.remotePath}`;
+  console.log(`${action} on ${targets.length} server(s)${args.dryRun ? " [DRY RUN]" : ""}\n`);
 
   let failures = 0;
 
@@ -190,20 +221,22 @@ function main() {
     };
 
     try {
-      run("ssh", [
-        "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-        target, `mkdir -p ${shQuote(remoteDir)}`,
-      ]);
+      if (scriptPath) {
+        run("ssh", [
+          "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+          target, `mkdir -p ${shQuote(remoteDir)}`,
+        ]);
 
-      run("scp", [
-        "-P", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-        scriptPath, `${target}:${args.remotePath}`,
-      ]);
+        run("scp", [
+          "-P", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+          scriptPath, `${target}:${args.remotePath}`,
+        ]);
 
-      run("ssh", [
-        "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-        target, `chmod 755 ${shQuote(args.remotePath)}`,
-      ]);
+        run("ssh", [
+          "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+          target, `chmod 755 ${shQuote(args.remotePath)}`,
+        ]);
+      }
 
       // Idempotent authorized_keys update: strip any existing line for this
       // exact pubkey (by matching the key material, not the comment or the
@@ -226,13 +259,19 @@ function main() {
       ]);
 
       if (!args.dryRun) {
-        const verify = execFileSync("ssh", [
+        // Restricted mode: send no command, let the forced-command wrapper's
+        // default verb answer (this tool doesn't know the script's verb
+        // vocabulary). Unrestricted mode: there's no wrapper to fall back on
+        // a default, so send a literal, harmless command instead.
+        const verifyArgs = [
           "-i", pubkeyPath.replace(/\.pub$/, ""),
           "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
           "-o", "StrictHostKeyChecking=accept-new",
           target,
-        ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-        console.log(`  OK — deployed and verified (default verb output: ${verify.trim().split("\n")[0]}...)`);
+        ];
+        if (args.unrestricted) verifyArgs.push("echo sync-forced-command-ok");
+        const verify = execFileSync("ssh", verifyArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        console.log(`  OK — synced and verified (output: ${verify.trim().split("\n")[0]}...)`);
       } else {
         console.log("  OK — dry run, nothing executed");
       }
