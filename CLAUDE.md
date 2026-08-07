@@ -1,6 +1,7 @@
 # OpenClaw Multi-Agent System — Project Brief
 
 ## Infrastructure
+
 - **n8n**: still running on Ubuntu server but **no longer the default execution layer** (see DECIDED section below)
 - **OpenClaw**: running on Mac Mini (reasoning layer + WhatsApp relay via wacli)
 - **Connected via Tailscale**: `gateway.bind: "tailnet"` in OpenClaw config, NOT loopback
@@ -17,13 +18,16 @@ with OpenClaw-native scheduling. See "Cron job patterns for watchers" below for 
 concrete templates to follow.
 
 ### Flow for cron/scheduled alerts (current, working)
+
 ```
 OpenClaw cron → command payload (runs daily-digest.mjs) → stdout captured →
 OpenClaw announces via wacli → user
 ```
+
 No webhooks, no n8n round-trip, no LLM cost.
 
 ### Flow for on-demand questions (no change)
+
 ```
 User → WhatsApp → OpenClaw (parses intent, calls read-only MCP/SSH tools directly) →
 OpenClaw answers → user
@@ -34,6 +38,7 @@ OpenClaw answers → user
 **The three coding specialists (code review, debug/triage, app-dev) remain independent subagent task briefs spawned directly by the main dispatcher at `maxSpawnDepth: 1`.** This is a deliberate rejection of the alternative "nested orchestrator" design where a coding-orchestrator subagent would itself spawn further sub-subagents for decomposed work.
 
 **Rationale:**
+
 - Matches how the other 10 specialists already work — consistency
 - Cheaper (no extra LLM hop for an orchestrator layer)
 - Avoids subagent sprawl for work that doesn't need decomposition
@@ -45,6 +50,7 @@ OpenClaw answers → user
 **Do NOT split app-dev into stack-specific subagents (Python/Django, PHP/Laravel, Dart/Flutter, JS/React, AI/ML).** Keep one generalist app-dev agent.
 
 **Rationale:**
+
 - Avoids routing ambiguity — "build me an app" would require upfront disambiguation ("which stack?") before routing, violating ROUTING.md's hard rule: "never delegate uncertainty"
 - Stack is task detail, not a routing axis — the user's message ("build a Django app") already contains the stack; the app-dev task-brief forwards the verbatim user message, so app-dev knows what to build
 - Split only if/when evidence emerges (e.g., DeepSeek Flash struggles with Laravel patterns, or a stack needs dedicated tooling like baked-in artisan CLI) — capability gaps, not naming gaps
@@ -54,16 +60,18 @@ OpenClaw answers → user
 
 ## Architecture decision — DECIDED: Skill Workshop migration deferred
 
-**The plain-markdown-file pattern (specialist briefs like `watchers/infra-watcher/AGENT.md`, referenced by literal file path in `sessions_spawn` task text) stays as-is for now. Skill Workshop conversion is deferred, not rejected — it will only be revisited once the roster has grown past the current 1 built specialist (infra-watcher) and hand-maintaining plain markdown files actually becomes a real pain point in practice.**
+**The plain-markdown-file pattern (specialist briefs like `watchers/infra-watcher/AGENT.md`, referenced by literal file path in `sessions_spawn` task text) stays as-is for now. Skill Workshop conversion is deferred, not rejected — it will only be revisited once the roster has grown past the current 2 built specialists (infra-watcher, infra-ops) and hand-maintaining plain markdown files actually becomes a real pain point in practice.**
 
 **Rationale:**
-- The plain-markdown-via-sessions_spawn(task: "Read X.md...") pattern already works — infra-watcher proves it in production
+
+- The plain-markdown-via-sessions_spawn(task: "Read X.md...") pattern already works — infra-watcher and infra-ops both prove it in production
 - This isn't fixing something broken; Skill Workshop trades upfront conversion effort for better long-term hygiene as the roster scales — a maturity improvement, not a functional gap
-- Converting now means converting a brief that already works purely for process hygiene, while 12 unbuilt specialists are still ahead
+- Converting now means converting briefs that already work purely for process hygiene, while 13 unbuilt specialists are still ahead
 - Better sequencing: build a few more specialists as plain AGENT.md files first (matching the proven pattern), see if "N hand-maintained markdown files" pain actually shows up, then decide if Skill Workshop conversion is worth it — rather than converting before the pain is confirmed
 - Lower priority than the other punch-list items — no urgency, purely optional hygiene
 
 ## OpenClaw hooks config (already working)
+
 ```json
 {
   "hooks": {
@@ -76,6 +84,7 @@ OpenClaw answers → user
   }
 }
 ```
+
 Endpoint: `POST /hooks/agent` with `{ message, deliver: true, channel: "whatsapp", to, model, timeoutSeconds }`.
 `message` is a prompt, not verbatim text — phrase it as "reply with exactly this text and nothing
 else: ..." to force verbatim relay and avoid the model adding commentary.
@@ -85,104 +94,82 @@ gateway process is started AFTER the export, in the same shell, or the var is se
 the gateway process actually reads from (shell profile, launchd plist, pm2 ecosystem file —
 depends how the gateway is run). Confirm before assuming `${VAR}` substitution works.
 
-## Agent inventory (13 total)
+## Agent inventory (15 total)
 
 ### Task agents (ask → respond, no shared dispatcher — domains don't overlap)
+
 - **Coding & dev**: code review (gh for line comments, cc for cross-file), debug/triage, app-dev (needs high-context route, not gh)
 - **Business analytics**: SEO research, metrics reporting, competitive watcher, **cost tracking** (new — Vultr billing API now, Hostinger + others later)
 - **Study**: research assistant, study scheduler, assignment drafting (approval gate before submission)
 
 ### Autonomous watchers (OpenClaw-native cron, scheduled, silent unless anomaly, no LLM cost)
-- **Infra watcher** ← currently being built, see spec below
+
+- **Infra watcher** — built and live (Vultr MCP, Hostinger MCP, WHOIS, SSH all connected and verified). See `watchers/infra-watcher/AGENT.md` and `README.md` for current operational detail — that's the source of truth, not the section below.
 - CI watcher (not started)
 - Pipeline QA (not started)
 
 ### Approval-gated agents (act, but need sign-off on risky steps)
-- Infra ops (SSH, restarts, DB fixes — separate from infra watcher, which is read-only)
-- Invoicing (client-facing, needs approval before sending)
 
-## Infra watcher — RESET, MCP-first architecture (no n8n for this agent)
+- **Infra ops** — built and live (SSH, restarts, DB fixes — separate from infra watcher, which is read-only). Mutate-capable key deployed and verified on all 6 servers; a forced-command wrapper (`ops-check.sh`) exists and is toggled per server depending on what that server needs (e.g. left open during a migration). See `ops/infra-ops/AGENT.md` and `remote/DEPLOYMENT.md` — check `instances.json`'s `_ops_note` for current per-server restriction status, it changes.
+- Invoicing (client-facing, needs approval before sending) — not started
+
+## Infra watcher — DECIDED: MCP-first architecture (no n8n for this agent)
 
 This agent was originally planned as an n8n-driven cron workflow. Redesigned from zero to
 be a natural-language, read-only Q&A agent instead — better fit for questions like "what's
 CPU% of ulak server" or "which instance has low disk space" than n8n's rigid workflow logic.
+**This decision is closed and the agent is built and live** — the architecture below is why,
+not a spec to implement. For current operational detail (tool names, thresholds, exact
+capabilities, what's connected) see `watchers/infra-watcher/AGENT.md` and `README.md` —
+those are the source of truth and get updated as things change; this file won't be kept in
+sync with that level of detail going forward.
 
 **Purpose**: answer infra questions conversationally via WhatsApp. READ-ONLY — no reboot,
-no delete, no modify. Any agent that controls/acts on servers is a SEPARATE agent (infra-ops,
-not yet built), not this one.
+no delete, no modify. Any agent that controls/acts on servers is a SEPARATE agent (infra-ops).
 
 **Architecture**
+
 ```
 You → WhatsApp → OpenClaw (read-only tool scope)
-                     ├─ Vultr MCP (community server, e.g. rsp2k/mcp-vultr)
-                     │    → instance list, status — READ-ONLY tools only
-                     ├─ Hostinger MCP (official: hostinger/api-mcp-server)
+                     ├─ Vultr MCP (community server) — live
+                     │    → billing/DNS/etc via MCP; instance list/status via a direct-API
+                     │      fallback script (this package version has no MCP tool for it)
+                     ├─ Hostinger MCP (official) — connected and live
                      │    → VPS list, CPU/RAM/disk/network metrics — READ-ONLY tools only
-                     ├─ WHOIS lookup (shell or MCP)
-                     │    → domain expiration, ANY registrar (Hostinger + DomaiNesia +
-                     │      future ones), since expiration is public WHOIS data — no
-                     │      registrar-specific credential needed for this check
-                     └─ SSH (read-only commands only: df, free, top, cPanel UAPI reads)
-                          → cPanel checks per-instance (both Vultr and Hostinger instances)
+                     ├─ WHOIS lookup (script) — live
+                     │    → domain expiration, ANY registrar, since expiration is public
+                     │      WHOIS data — no registrar-specific credential needed
+                     └─ SSH (read-only, forced-command restricted) — deployed and verified
+                          on all 6 servers in instances.json
+                          → cPanel checks per-instance, live resource % for Vultr instances
 ```
 
 **Why no n8n here**: n8n's workflow logic is rigid (good for scheduled, deterministic
 checks) but MCP is a better fit for ad-hoc natural language questions — the agent picks
 which tool to call based on what's actually asked, rather than following a fixed branch.
-OpenClaw's native cron now provides the scheduled/proactive alert path that was previously
-marked as TBD. See "Cron job patterns for watchers" below for the concrete patterns —
-this decision is closed.
-
-**Confirmed provider capabilities**
-- **Vultr**: MCP wraps the same public API — does NOT add CPU/RAM/disk metrics that the raw
-  API doesn't have. Reachability/instance status: yes. Live resource %: NO, needs SSH
-  regardless of MCP.
-- **Hostinger**: MCP + underlying API genuinely expose real-time CPU/RAM/disk/network
-  metrics per VPS. One list call returns all instances under the account — no hardcoded IDs.
-- **DomaiNesia**: no MCP, no consumer API (their public API is reseller-only, requires a
-  reseller account — not applicable for checking your own domain list). Use WHOIS lookup
-  instead — provider-agnostic, works for domains at DomaiNesia, Hostinger, or anywhere else.
-- **cPanel**: no MCP for any provider. Always SSH, always per-instance (each instance runs
-  its own separate cPanel install — no way to check multiple from one connection).
-
-**What still needs a maintained list (not credentials, just identifiers)**
-```
-domains.json   # domain names only, e.g. ["site-a.com", "site-b.id"]
-instances.json          # per-instance SSH user + key path, matched against each
-                         # provider's MCP-returned instance ID at query time
-```
+OpenClaw's native cron provides the scheduled/proactive alert path (daily digest, see
+"Cron job patterns for watchers" below).
 
 **Safety constraint — hard requirement**
 Both Vultr MCP and Hostinger MCP can also write/act (reboot, delete, modify DNS), not just
-read. This agent must be scoped to read-only tools only — either by restricting which MCP
-tools are exposed to it, or using a scoped/read-only API key if the provider supports one.
-No destructive capability should reach this agent under any circumstance; that capability
-belongs only to the separate infra-ops agent (not yet built).
+read. This agent must be scoped to read-only tools only. No destructive capability should
+reach this agent under any circumstance; that capability belongs only to the separate
+infra-ops agent.
 
-**Original questions this agent should answer** (from the redesign brief):
-- "What's the CPU percentage of [server]?" → Hostinger MCP if on Hostinger; SSH if on Vultr
-- "Tell me the closest expiring domain" → WHOIS lookup across `domains.json`
-- "Which instance is active in Vultr?" → Vultr MCP, read-only instance list
-- "Which instance has low disk space?" → Hostinger MCP (direct) or SSH (Vultr instances)
+**Cost tracking (lives in Business analytics cluster, not infra watcher)**
 
-**Alerting** (still applies once proactive/scheduled path is added)
-- WhatsApp only, via OpenClaw relay (see hooks flow above)
-- Severity marker: 🔴 critical / 🟡 warning
-- Multiple issues on the same day = ONE combined message, not separate pings
-- Thresholds: CPU >90%, disk >90%, RAM >90%, domain/SSL expiry tiers at 30/14/7 days
-
-**Cost tracking (new, lives in Business analytics cluster, not infra watcher)**
 - Vultr: `GET /v2/billing/history` and `GET /v2/billing/invoices`
 - Fully autonomous, read-only, no approval gate
 - Scope to expand to Hostinger and other service costs later
 
 ## Repo strategy
+
 Single repo to start (not one-per-agent, not split-by-domain yet). Split later once boundaries
 are proven by actual use — moving a folder into its own repo later is cheap, premature splitting
 isn't.
 
 ```
-openclaw-agents/
+openclaw-multi-agents/
 ├── CLAUDE.md              # this file
 ├── .env.example
 ├── instances.example.json # placeholder for per-instance SSH keys, real file gitignored
@@ -192,12 +179,12 @@ openclaw-agents/
 │   ├── business/{seo-research,metrics-reporting,competitive-watcher,cost-tracking}/
 │   └── study/{research-assistant,study-scheduler,assignment-drafting}/
 ├── watchers/
-│   ├── infra-watcher/      # Cron- and MCP-driven — BUILD THIS FIRST
-│   ├── ci-watcher/
-│   └── pipeline-qa/
+│   ├── infra-watcher/      # Cron- and MCP-driven — built and live
+│   ├── ci-watcher/         # not started
+│   └── pipeline-qa/        # not started
 └── ops/
-    ├── infra-ops/
-    └── invoicing/
+    ├── infra-ops/          # built and live
+    └── invoicing/          # not started
 ```
 
 `ops/` and anything touching real credentials/client data should stay private even if the rest
@@ -213,6 +200,7 @@ OpenClaw-native cron uses two payload patterns for watcher agents. Both avoid n8
 Best for: scheduled checks that always produce output, like a daily summary or heartbeat.
 
 **Working example (infra-watcher-daily):**
+
 ```bash
 openclaw cron add \
   --name "ci-watcher-daily" \
@@ -232,6 +220,7 @@ as the message. The `infra-watcher-daily` job (id `cb1f9446-...`, runs at `0 8 *
 this pattern with `daily-digest.mjs` and is confirmed working with `lastRunStatus: ok`.
 
 **For ci-watcher and pipeline-qa (always-run daily check):**
+
 1. Create `watchers/ci-watcher/daily-check.mjs` (or similar) — a standalone Node.js script
    that calls the relevant API(s) and prints a formatted message. No OpenClaw agent context,
    no MCP, no subagent — just `execSync` / `fetch` / `fs` calls.
@@ -245,6 +234,7 @@ Best for: polling checks that should stay silent until something changes (e.g. C
 pipeline failure, threshold breach).
 
 **Template:**
+
 ```bash
 openclaw cron add \
   --name "pipeline-qa-watcher" \
@@ -260,12 +250,14 @@ openclaw cron add \
 
 The trigger script (`--trigger-script <path>`) is a condition gate that runs on every
 scheduled tick. It must return JSON `{ fire, message?, state? }`:
+
 - `fire: true` → the command payload executes; the message is appended to its context
 - `fire: false` → the tick is silently skipped
 - `state` is persisted between runs (16 KB cap) so the script can diff against the last
   observation and only fire on state changes
 
 **Example trigger script for ci-watcher** (`watchers/ci-watcher/ci-check.mjs`):
+
 ```js
 #!/usr/bin/env node
 // Reads trigger.state from env or stored state, compares current CI status,
@@ -283,10 +275,10 @@ healthy ticks, zero spam, fired only when the condition really changes.
 
 ### Which pattern to use for ci-watcher and pipeline-qa
 
-| Watcher | Pattern | Frequency | Rationale |
-|---|---|---|---|
-| **ci-watcher** | `trigger.script` + `--command` | Every 15 min | CI status rarely changes; spam on every tick is worse than a short silence. Fire only when a check transitions (e.g. pending→fail, fail→pass). |
-| **pipeline-qa** | `trigger.script` + `--command` | Every 15 min | Same reasoning as ci-watcher — pipeline failures are exceptions, not the norm. Only alert on change. |
+| Watcher               | Pattern                            | Frequency    | Rationale                                                                                                                                        |
+| --------------------- | ---------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **ci-watcher**  | `trigger.script` + `--command` | Every 15 min | CI status rarely changes; spam on every tick is worse than a short silence. Fire only when a check transitions (e.g. pending→fail, fail→pass). |
+| **pipeline-qa** | `trigger.script` + `--command` | Every 15 min | Same reasoning as ci-watcher — pipeline failures are exceptions, not the norm. Only alert on change.                                            |
 
 For the trigger scripts, follow the same structure as `infra-watcher/daily-digest.mjs`:
 standalone Node.js, no OpenClaw agent context, no MCP tools, pure `execSync`/fetch/stdout.
@@ -294,24 +286,28 @@ The `daily-digest.mjs` source (at `watchers/infra-watcher/daily-digest.mjs`) is 
 template — modelled on its `execSync` calls, error handling, and threshold checks.
 
 ## Current status / next steps
+
 1. ✅ Tailscale connected, OpenClaw gateway reachable from n8n server
 2. ✅ `/hooks/agent` webhook confirmed working end-to-end (WhatsApp message delivery confirmed)
-3. ✅ Infra watcher architecture RESET: MCP-first (Vultr MCP + Hostinger MCP), WHOIS for
-   domains, SSH only for cPanel and Vultr resource metrics, read-only scope only
-4. ⬜ Connect Vultr MCP (community server) to OpenClaw, scoped read-only, test with a live
-   query ("which Vultr instances are active")
-5. ⬜ Connect Hostinger MCP (official) to OpenClaw, scoped read-only, test with a live query
-   ("what's the CPU% of [instance]")
-6. ⬜ Set up WHOIS lookup capability + `domains.json`, test "closest expiring domain"
-7. ⬜ Set up per-instance SSH access (`instances.json`) for cPanel checks + Vultr resource %
-8. ⬜ Test all four original example questions end-to-end via WhatsApp
-9. ✅ DECIDED: OpenClaw-native cron for all scheduled watchers. n8n kept only if a specific
+3. ✅ Infra watcher: MCP-first architecture built and live — Vultr MCP, Hostinger MCP, WHOIS
+   lookup, and per-instance SSH (forced-command restricted) all connected and verified.
+   Daily digest cron job (`infra-watcher-daily`) running. See `watchers/infra-watcher/AGENT.md`.
+4. ✅ DECIDED: OpenClaw-native cron for all scheduled watchers. n8n kept only if a specific
    future need requires something cron genuinely can't do (credential vault/workflow UI) —
    not as default execution layer. See "Cron job patterns for watchers" below.
-10. ⬜ Only after infra-watcher is solid: move to CI watcher, then task agents, then ops agents
-    (infra-ops — the separate agent that CAN act — is a distinct future build, not this one)
+5. ✅ Infra ops built and live — mutate-capable SSH key (`infra_ops_ed25519`) deployed and
+   verified on all 6 servers. Forced-command wrapper (`ops-check.sh`) built, covering
+   read-only diagnostics + service/container restart-reload; toggled per server rather than
+   applied uniformly (some servers restricted, some left full-access for tasks that need the
+   broader toolset). See `ops/infra-ops/AGENT.md` and `remote/DEPLOYMENT.md` — check
+   `instances.json`'s `_ops_note` for current per-server status, it changes.
+6. ⬜ CI watcher — not started
+7. ⬜ Pipeline QA — not started
+8. ⬜ Task agents (coding, business analytics, study clusters) — not started
+9. ⬜ Invoicing (approval-gated ops agent) — not started
 
 ## Security notes
+
 - `OPENCLAW_HOOKS_TOKEN` must be different from `gateway.auth.token` — do not reuse
 - SSH access should use key files, not passwords
 - Rotate any token that's been shared in chat/screenshots before going live
