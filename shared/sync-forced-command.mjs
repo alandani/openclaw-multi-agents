@@ -77,6 +77,16 @@ function expandHome(p) {
   return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p;
 }
 
+// POSIX single-quote escaping: wrap in '...', turning any embedded ' into
+// '\'' (close quote, escaped literal quote, reopen quote). Used any time a
+// value we don't fully control the shape of (remote-path, key material, the
+// composed authorized_keys line) gets interpolated into a command string
+// that's handed to the remote shell — belt-and-suspenders even though these
+// currently only ever come from trusted local CLI args, not remote input.
+function shQuote(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
 function usage() {
   console.log(`
 Usage:
@@ -182,7 +192,7 @@ function main() {
     try {
       run("ssh", [
         "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-        target, `mkdir -p ${remoteDir}`,
+        target, `mkdir -p ${shQuote(remoteDir)}`,
       ]);
 
       run("scp", [
@@ -192,7 +202,7 @@ function main() {
 
       run("ssh", [
         "-p", String(port), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-        target, `chmod 755 ${args.remotePath}`,
+        target, `chmod 755 ${shQuote(args.remotePath)}`,
       ]);
 
       // Idempotent authorized_keys update: strip any existing line for this
@@ -204,8 +214,8 @@ function main() {
         "set -eu",
         "mkdir -p ~/.ssh && chmod 700 ~/.ssh",
         "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys",
-        `grep -v '${keyMaterial}' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.tmp || true`,
-        `echo '${authorizedKeysLine}' >> ~/.ssh/authorized_keys.tmp`,
+        `grep -v ${shQuote(keyMaterial)} ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.tmp || true`,
+        `echo ${shQuote(authorizedKeysLine)} >> ~/.ssh/authorized_keys.tmp`,
         "mv ~/.ssh/authorized_keys.tmp ~/.ssh/authorized_keys",
         "chmod 600 ~/.ssh/authorized_keys",
       ].join(" && ");

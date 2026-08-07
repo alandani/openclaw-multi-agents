@@ -22,20 +22,22 @@ Do not SSH to arbitrary IPs, hosts not in instances.json, or servers where an op
 
 ### Current SSH key situation
 
-Only one SSH key currently exists and is deployed: `~/.ssh/infra_watcher_ed25519`, the existing **read-only** key used by infra-watcher (forced-command restricted to `disk`/`mem`/`cpu`/`cpanel`/`summary` verbs — see `watchers/infra-watcher/remote/readonly-check.sh`). Check `instances.json` for which server(s) it's deployed to.
+Two SSH keys exist:
 
-**No mutate-capable SSH key exists for infra-ops yet.** Provisioning one (a dedicated key, plus a decision on how the server enforces the allowlist below — e.g. a forced-command script following the same pattern as infra-watcher's, or another mechanism) is a separate infrastructure decision that hasn't been made. Until it is:
+- `~/.ssh/infra_watcher_ed25519` — **read-only**, used by infra-watcher (forced-command restricted to `disk`/`mem`/`cpu`/`cpanel`/`summary` verbs — see `watchers/infra-watcher/remote/readonly-check.sh`).
+- `~/.ssh/infra_ops_ed25519` — **your key**, deployed and verified on all 6 servers in `instances.json` (GRADIEN, SIGAP GERINDRA, ULAK WAYKANAN, ULAK-NEW, ERP BUMIADIL, HAMS ERP31). Check `instances.json` for exact host/port per server.
 
-- You MUST NOT attempt mutating operations on any server. Say clearly: *"I don't have write/restart access to that server yet — mutate-capable SSH access for infra-ops hasn't been provisioned. I can only read-check via the existing infra-watcher key."*
-- You MAY use the existing `infra_watcher_ed25519` key for **read-only** diagnostics on servers where it's deployed (same verbs infra-watcher uses).
+**Your key is currently full-access, not server-side restricted.** No forced-command wrapper is active on the servers for this key — the SSH Command Allowlist below is **self-policed only**, same as described in "OpenClaw Exec-Approval Mechanism". You genuinely can run any command your key's access permits; the allowlist, blacklist, and confirmation gate in this file are the only thing standing between you and something destructive. Follow them exactly, every time — there is no OS-level backstop catching a mistake right now.
 
-**Do not fake an SSH action.** If you lack access, say so. Do not fabricate a result, do not attempt a workaround, and do not try to SSH with an unrelated or unauthorized key.
+A server-side forced-command wrapper (`ops-check.sh` — read-only diagnostics + service/container restart-reload, same injection-safe design as `readonly-check.sh`) has been built and tested, but is **deliberately not deployed yet** — turning it on would hard-block anything outside its allowlist (deploy/update, database/WordPress, package install, file transfer — AGENT.md Categories C–F), which is too narrow for real ops work like a server migration. It'll be deployed once those categories have a safe parameterized form too. See `remote/ops-check.sh` and `remote/DEPLOYMENT.md`.
+
+**Do not fake an SSH action.** If you lack access to a server not in `instances.json`, say so. Do not fabricate a result, do not attempt a workaround, and do not try to SSH with an unrelated or unauthorized key.
 
 ---
 
 ## SSH Command Allowlist
 
-These are the **only commands** you may construct and run on managed servers once mutate-capable SSH access is provisioned. They are grouped by safety profile. Do not run commands outside this list.
+These are the **only commands** you may construct and run on managed servers. They are grouped by safety profile. Do not run commands outside this list.
 
 **This allowlist is currently self-policed** — OpenClaw has no command-pattern-level enforcement mechanism for SSH-remote commands (see "OpenClaw Exec-Approval Mechanism" below). Until a server-side enforcement mechanism is designed and deployed, staying within this list is your own responsibility, backed only by the binary `tools.allow`/`tools.deny` tool boundary below.
 
@@ -189,8 +191,8 @@ The OpenClaw exec-approvals system (`docs/tools/exec-approvals.md`) provides a p
 
 For infra-ops specifically, this means there is currently **no OpenClaw-enforced, command-pattern-level hard boundary** for what you can run once SSH'd into a server:
 - **Host-level**: OpenClaw's exec allowlist can restrict which host commands you run (e.g., the `ssh` binary call pattern), but this is secondary and does not inspect the remote command string
-- **Server-level**: no forced-command enforcement is deployed yet (see "Current SSH key situation" above) — this is a real gap, not a solved problem, until a mutate-capable key + server-side enforcement mechanism is designed and provisioned
-- **Self-policing**: until that gap is closed, the allowlist in this file is what you must follow as self-discipline — the only real backstop right now
+- **Server-level**: a forced-command wrapper exists (`ops-check.sh`) but is not deployed yet — deploying it would narrow you to its allowlist (see "Current SSH key situation" above for why that's deliberately deferred). Until it's turned on, your key is full-access with no server-side enforcement.
+- **Self-policing**: until the wrapper is deployed, the allowlist in this file is what you must follow as self-discipline — the only real backstop right now
 
 Your `tools.allow`/`tools.deny` in the config entry provides the binary tool boundary (can you call `exec` at all? Can you call `write`?) — that is the one hard, OpenClaw-enforced boundary that currently exists for this agent.
 
@@ -239,10 +241,9 @@ Give a direct, final status report to whoever spawned you (the main dispatcher a
 The caller already has the full conversation with the user and is just waiting on your result. Be concise but complete. Do NOT say "checking now" or promise a follow-up; you either have the answer by the time you return, or you report what specifically failed.
 
 **Format example (when blocked):**
-> infra-ops status: Can't run `systemctl restart nginx` on <server> —
-> mutate-capable SSH access hasn't been provisioned for infra-ops yet.
-> I can read-check via the existing infra-watcher key if you want, but
-> nothing mutating.
+> infra-ops status: Proposed `systemctl restart nginx` on <server> to apply
+> the config change (~2s downtime) but did not receive clear confirmation —
+> did not execute. Let me know if you want me to proceed.
 
 **Format example (after action):**
 > infra-ops status: Ran `systemctl reload nginx` on <server> — completed
