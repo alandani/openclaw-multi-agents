@@ -85,7 +85,7 @@ sessions_spawn(
   taskName: "code_review"
 )
 ```
-If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/ollama/gpt-oss:120b`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -112,7 +112,7 @@ sessions_spawn(
   taskName: "debug_triage"
 )
 ```
-If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/ollama/gpt-oss:120b`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -138,7 +138,7 @@ sessions_spawn(
   taskName: "app_dev"
 )
 ```
-If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/ollama/gpt-oss:120b`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
