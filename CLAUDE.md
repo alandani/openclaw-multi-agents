@@ -4,11 +4,50 @@
 
 - **n8n**: still running on Ubuntu server but **no longer the default execution layer** (see DECIDED section below)
 - **OpenClaw**: running on Mac Mini (reasoning layer + WhatsApp relay via wacli)
-- **Connected via Tailscale**: `gateway.bind: "tailnet"` in OpenClaw config, NOT loopback
-- **Model routing**: OpenClaw uses 9Router to reach Claude Code (`cc`), OpenCode/Kiro (free),
-  GitHub Copilot (`gh` — ~200 token context, use ONLY for single-line/narrow tasks, never
-  multi-file or long-context work), and local LM Studio (Qwen/Gemma — default/primary route,
-  free). Escalate to paid routes only when local models genuinely can't handle the task.
+- **Connected via Tailscale**: `gateway.bind: "loopback"` in OpenClaw config, with
+  `gateway.tailscale.mode: "serve"` exposing it over the tailnet — not a raw tailnet bind
+  (as an earlier version of this doc claimed; confirmed against the live config 2026-08-11)
+- **Model routing — DECIDED 2026-08-12: free-first with a paid `cc` terminator, no local
+  models.** OpenClaw reaches four 9Router providers — `kr` (Kiro, free), `oc` (OpenCode,
+  free, custom-registered so it never appears in 9Router's `/v1/models` catalog but still
+  routes fine), `gemini` (free), and `cc` (Claude Code, paid). Local LM Studio is **not
+  used anywhere** (chat generation, not embeddings — too slow for agent work; local is
+  still fine for `agents.defaults.memorySearch`, which is embeddings).
+  - **Rule**: `cc` is never a primary model except **Invoicing** (client-facing, quality
+    justifies paying unconditionally). Every other agent's chain starts on a free
+    provider and ends on `cc` as the last-resort tier — nothing is more reliable than
+    `cc`, so nothing gets added after it.
+  - **Rule**: chain length isn't fixed. A free model earns a slot only if it adds a real
+    capability or genuine provider diversity for that specific cluster; otherwise the
+    chain is short (2 tiers). Padding a chain with a model that doesn't help just adds
+    failure modes.
+  - **Known gotcha, tested 2026-08-12**: 9Router's `kr/*` "agentic"-tagged variants
+    (`-agentic`, `-thinking`, `-thinking-agentic` suffixes) return HTTP 400
+    `REQUEST_BODY_INVALID` on every request shape — the `agentic:true` capability flag
+    describes an internal Kiro routing mode, not something reachable via
+    `/v1/chat/completions`. **Use base `kr/*` IDs only** (e.g. `kr/glm-5`, not
+    `kr/glm-5-agentic`).
+  - Current live mapping (`agents.defaults` + `agents.list[].infra-ops`, applied and
+    verified against `~/.openclaw/openclaw.json` 2026-08-12):
+    - **Orchestrator** (`main` + subagent default): `kr/claude-haiku-4.5` →
+      `oc/deepseek-v4-flash-free` → `gemini/gemini-3.6-flash` → `cc/claude-haiku-4-5-20251001`
+    - **infra-ops**: `kr/claude-sonnet-4.5` → `oc/deepseek-v4-flash-free` →
+      `cc/claude-sonnet-5`
+    - **`agents.defaults.utilityModel`** (global — session/thread title generation only,
+      not an agent's reasoning model): `cc/claude-haiku-4-5-20251001`. Set once at
+      `agents.defaults` rather than per-agent since it's a generic, agent-agnostic task;
+      uses `cc` because `utilityModel` has no fallback field (`string` only, unlike
+      `model`'s `{primary, fallbacks}`), so the one slot should be the reliable one.
+  - The other 8 clusters (coding, business analytics, study, assignment drafting,
+    infra-watcher, invoicing) have a designed mapping but no `agents.list[]` entry yet
+    since those agents aren't built — see [ROUTING.md](ROUTING.md) for the per-specialist
+    `sessions_spawn` model chains used until then.
+  - `gh` (GitHub Copilot, ~200 token context, single-line/narrow tasks only) has **no
+    live provider connection in 9Router right now** — don't route anything to it until
+    a GitHub Copilot account is connected there.
+  - Full design rationale, the complete active-model inventory, and every model verdict
+    (kept vs. dropped, and why) live in the planning doc this decision came from —
+    ask the assistant if you need that level of detail; it's not duplicated here.
 
 ## Architecture principle — DECIDED: OpenClaw-native cron as default
 

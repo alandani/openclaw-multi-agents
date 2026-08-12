@@ -5,8 +5,11 @@ cron as the primary execution layer for all scheduled agents:
 
 - **OpenClaw** (Mac Mini) — the reasoning and execution layer: parses intent,
   makes judgment calls, runs scheduled checks via native cron, and relays messages
-  over WhatsApp via wacli. Model routing goes through 9Router (local LM Studio
-  models by default, paid routes only when needed).
+  over WhatsApp via wacli. Model routing goes through 9Router — free routes
+  (Kiro, OpenCode, Gemini) by default, paid Claude Code routes reserved as the
+  last-resort tier in each chain (client-facing Invoicing is the one exception).
+  No local models — see [CLAUDE.md](CLAUDE.md)'s Model routing section for the
+  full per-cluster mapping.
 - **n8n** (Ubuntu server) — still running but **no longer the default execution
   layer** (see [CLAUDE.md](CLAUDE.md)'s DECIDED section for the full rationale).
   OpenClaw's native cron has replaced n8n for all scheduled-agent needs; n8n is

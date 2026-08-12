@@ -80,12 +80,12 @@ code-adjacent but ambiguous with another coding specialist, see disambiguation i
 ```
 sessions_spawn(
   task: "You are a code-review specialist. Review the code the user provided. Give structured feedback: correctness, edge cases, style, performance. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/qwen3-coder-next",
   label: "code-review",
   taskName: "code_review"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -107,12 +107,12 @@ or asks "why is X not working". Example phrases:
 ```
 sessions_spawn(
   task: "You are a debug/triage specialist. The user has an error or unexpected behaviour. Reproduce, identify root cause, and suggest a fix. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/qwen3-coder-next",
   label: "debug-triage",
   taskName: "debug_triage"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -133,12 +133,12 @@ of existing code (code-review).
 ```
 sessions_spawn(
   task: "You are an app-development specialist. Build the requested feature/script/app. Prioritise correctness, complete implementation, and clear documentation. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/qwen3-coder-next",
   label: "app-dev",
   taskName: "app_dev"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -158,12 +158,12 @@ site optimisation for search engines. Example phrases:
 ```
 sessions_spawn(
   task: "You are an SEO research specialist. Analyse search rankings, keywords, backlinks, or site SEO as requested. Use any available web search or API tools. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/glm-5",
   label: "seo-research",
   taskName: "seo_research"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/gemini/gemini-3.6-flash`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-haiku-4-5-20251001`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -181,12 +181,12 @@ business performance. Example phrases:
 ```
 sessions_spawn(
   task: "You are a metrics reporting specialist. Compile and present the requested metrics or report. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/glm-5",
   label: "metrics-reporting",
   taskName: "metrics_reporting"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/gemini/gemini-3.6-flash`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-haiku-4-5-20251001`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -204,12 +204,12 @@ intelligence. Example phrases:
 ```
 sessions_spawn(
   task: "You are a competitive intelligence specialist. Research the competitor(s) or market landscape the user asked about. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/glm-5",
   label: "competitive-watcher",
   taskName: "competitive_watcher"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/gemini/gemini-3.6-flash`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-haiku-4-5-20251001`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -233,12 +233,12 @@ includes Vultr billing and (future) Hostinger/service costs. Example phrases:
 ```
 sessions_spawn(
   task: "You are a cost-tracking specialist. Check billing/invoice data as requested (Vultr billing API, etc.) and answer the user's cost question. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/kr/glm-5",
   label: "cost-tracking",
   taskName: "cost_tracking"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/gemini/gemini-3.6-flash`, then `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-haiku-4-5-20251001`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -258,12 +258,12 @@ summarise information from web sources. Example phrases:
 ```
 sessions_spawn(
   task: "You are a research assistant. Gather and synthesise information on the requested topic from web sources. Cite sources. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/gemini/gemini-3.6-flash",
   label: "research-assistant",
   taskName: "research_assistant"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/kr/deepseek-3.2`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -281,12 +281,12 @@ timetable, or organising study sessions. Example phrases:
 ```
 sessions_spawn(
   task: "You are a study scheduler. Create or adjust a study plan/timetable based on the user's request. The user's message was: <insert verbatim user message>",
-  model: "9router/oc/deepseek-v4-flash-free",
+  model: "9router/gemini/gemini-3.6-flash",
   label: "study-scheduler",
   taskName: "study_scheduler"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-sonnet-5`.
+If that fails, retry with model: `9router/kr/deepseek-3.2`, then `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -310,12 +310,12 @@ submission. Example phrases:
 ```
 sessions_spawn(
   task: "You are an assignment-drafting specialist. Draft/revise the assignment text the user requested. Include a note at the end listing any claims, figures, or facts the user should independently verify before submission. The user's message was: <insert verbatim user message>",
-  model: "9router/cc/claude-sonnet-5",
+  model: "9router/kr/claude-sonnet-4.5",
   label: "assignment-drafting",
   taskName: "assignment_drafting"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-opus-4-8`.
+If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -349,13 +349,12 @@ list), even if dollars are mentioned tangentially, route here.
 ```
 sessions_spawn(
   task: "Read /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/watchers/infra-watcher/AGENT.md, then answer this question using only what it describes: <insert verbatim user message>",
-  model: "lmstudio/qwen/qwen3.5-9b",
+  model: "9router/kr/claude-haiku-4.5",
   label: "infra-watcher",
   taskName: "infra_watcher_on_demand"
 )
 ```
-If that fails or the local model can't drive the tools correctly, retry with
-model: `9router/oc/deepseek-v4-flash-free`.
+If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9router/cc/claude-haiku-4-5-20251001`.
 
 > **Ack**: yes — send ack before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -408,7 +407,7 @@ sessions_spawn(
   task: "<insert verbatim user message>"
 )
 ```
-Fallback model chain: deepseek-v4-flash-free → claude-sonnet-5 → claude-haiku-4.5 (configured in openclaw.json).
+Model chain: `kr/claude-sonnet-4.5` → `oc/deepseek-v4-flash-free` → `cc/claude-sonnet-5` (configured in `agents.list[].infra-ops.model` in openclaw.json — not repeated here since it can drift; check the live config, not this file, if precision matters).
 
 > **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
@@ -434,12 +433,12 @@ invoices — client-facing, financial impact.
 ```
 sessions_spawn(
   task: "You are an invoicing specialist. Handle the user's invoicing request — draft, send, or update invoices as appropriate. The user's message was: <insert verbatim user message>",
-  model: "9router/cc/claude-sonnet-5",
+  model: "9router/cc/claude-opus-5",
   label: "invoicing",
   taskName: "invoicing"
 )
 ```
-If that fails, retry with model: `9router/cc/claude-opus-4-8`.
+If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 
 > **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 
