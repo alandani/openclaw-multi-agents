@@ -61,7 +61,7 @@ Three specialists share this cluster — domain overlap is high, so disambiguate
 (see the "ambiguitity" note at the end of each entry and the [No match](#no-match--ambiguous-intent)
 section for guidance).
 
-> **Flat design note**: The independent spawning of each coding specialist directly by the main dispatcher (rather than through a nested orchestrator) is a deliberate architecture decision — see the "DECIDED: Coding cluster stays flat" section in [CLAUDE.md](./CLAUDE.md) for the full rationale.
+> **Flat design note**: The independent spawning of each coding specialist directly by the main dispatcher (rather than through a nested orchestrator) is a deliberate architecture decision — see the "DECIDED: Coding cluster stays flat" section in [PROGRESS.md](./PROGRESS.md) for the full rationale.
 
 ### code-review
 
@@ -447,7 +447,7 @@ If that fails, retry with model: `9router/cc/claude-sonnet-5`.
 ## Pure Cron Watchers (CI Watcher & Pipeline QA)
 
 These two are **not** part of this on-demand routing table. They run exclusively via
-OpenClaw-native cron (per the "Cron job patterns for watchers" section in CLAUDE.md)
+OpenClaw-native cron (per the "Cron job patterns for watchers" section in PROGRESS.md)
 and only interact with WhatsApp through cron's `--announce` delivery mechanism. They:
 
 - Never receive on-demand questions from this dispatcher.

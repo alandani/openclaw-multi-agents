@@ -86,7 +86,7 @@ you need it and can't find it, say so rather than guessing an IP).
 
 Triggered once a day by the `infra-watcher-daily` cron job (replaces the old
 standalone `server-cost-agent` project's `vultr-digest`/`vultr-check` cron
-jobs, which are disabled — cost tracking is a separate agent per CLAUDE.md,
+jobs, which are disabled — cost tracking is a separate agent per PROGRESS.md,
 this digest is infra-watcher's own). Unlike an on-demand question, always
 produce a summary covering everything, even if nothing's wrong (daily cadence
 is low enough that a daily all-clear is fine — this differs from a
@@ -103,7 +103,7 @@ scheduled anomaly-only watcher):
    key deployed — see SSH section above). If a host ever fails (permission
    denied, timeout), it shows up as a per-host error rather than blocking the
    rest of the run — `BatchMode=yes` guarantees that fails fast, not hangs.
-   Disk/mem/cpu ≤90% thresholds per CLAUDE.md.
+   Disk/mem/cpu ≤90% thresholds per PROGRESS.md.
 
 Compose ONE combined WhatsApp message (short, emoji severity markers 🔴/🟡,
 otherwise 🟢/✅) — never send multiple messages for one run. If a check

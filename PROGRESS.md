@@ -27,6 +27,10 @@
     describes an internal Kiro routing mode, not something reachable via
     `/v1/chat/completions`. **Use base `kr/*` IDs only** (e.g. `kr/glm-5`, not
     `kr/glm-5-agentic`).
+  - **Known gotcha, tested 2026-08-12**: `oc/longcat-2.0-free` was briefly added to the
+    catalog, then confirmed discontinued upstream (`401 Model longcat-2.0-free is not
+    supported`) and removed. If an `oc/*` model starts 401ing with that message, it's
+    been retired, not a config error.
   - Current live mapping (`agents.defaults` + `agents.list[].infra-ops`, applied and
     verified against `~/.openclaw/openclaw.json` 2026-08-12):
     - **Orchestrator** (`main` + subagent default): `kr/claude-haiku-4.5` →
@@ -209,7 +213,7 @@ isn't.
 
 ```
 openclaw-multi-agents/
-├── CLAUDE.md              # this file
+├── PROGRESS.md            # this file — project brief and specs, model-agnostic
 ├── .env.example
 ├── instances.example.json # placeholder for per-instance SSH keys, real file gitignored
 ├── shared/                # 9Router config, common prompts/utils
@@ -315,7 +319,7 @@ healthy ticks, zero spam, fired only when the condition really changes.
 ### Which pattern to use for ci-watcher and pipeline-qa
 
 | Watcher               | Pattern                            | Frequency    | Rationale                                                                                                                                        |
-| --------------------- | ---------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| --------------------- | ----------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **ci-watcher**  | `trigger.script` + `--command` | Every 15 min | CI status rarely changes; spam on every tick is worse than a short silence. Fire only when a check transitions (e.g. pending→fail, fail→pass). |
 | **pipeline-qa** | `trigger.script` + `--command` | Every 15 min | Same reasoning as ci-watcher — pipeline failures are exceptions, not the norm. Only alert on change.                                            |
 
@@ -344,6 +348,9 @@ template — modelled on its `execSync` calls, error handling, and threshold che
 7. ⬜ Pipeline QA — not started
 8. ⬜ Task agents (coding, business analytics, study clusters) — not started
 9. ⬜ Invoicing (approval-gated ops agent) — not started
+10. ✅ Model routing redesigned and applied 2026-08-12 — see the Model routing section above.
+    9Router `apiKey` fixed (was a placeholder), coding cluster gained an `ollama/gpt-oss:120b`
+    fallback tier, `oc/longcat-2.0-free` added then removed (discontinued upstream).
 
 ## Security notes
 

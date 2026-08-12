@@ -8,10 +8,10 @@ cron as the primary execution layer for all scheduled agents:
   over WhatsApp via wacli. Model routing goes through 9Router — free routes
   (Kiro, OpenCode, Gemini) by default, paid Claude Code routes reserved as the
   last-resort tier in each chain (client-facing Invoicing is the one exception).
-  No local models — see [CLAUDE.md](CLAUDE.md)'s Model routing section for the
+  No local models — see [PROGRESS.md](PROGRESS.md)'s Model routing section for the
   full per-cluster mapping.
 - **n8n** (Ubuntu server) — still running but **no longer the default execution
-  layer** (see [CLAUDE.md](CLAUDE.md)'s DECIDED section for the full rationale).
+  layer** (see [PROGRESS.md](PROGRESS.md)'s DECIDED section for the full rationale).
   OpenClaw's native cron has replaced n8n for all scheduled-agent needs; n8n is
   retained only if a specific future need requires workflow UI or credential
   vaulting that cron doesn't provide.
@@ -37,7 +37,7 @@ Vultr MCP / Hostinger MCP / WHOIS / SSH → OpenClaw answers → user
 ## Repository layout
 
 ```
-├── CLAUDE.md              # full project brief and specs
+├── PROGRESS.md            # full project brief and specs
 ├── .env.example           # env template (copy to .env, never commit real values)
 ├── instances.example.json # per-instance SSH credentials template (real instances.json gitignored)
 ├── shared/                # 9Router config, common prompts/utils
@@ -80,7 +80,7 @@ rest of the repo goes public later.
    runtime, matched by instance ID.
 2. Test each SSH key manually (`ssh -i <key> user@host`) before wiring it into any agent.
 3. Make sure the OpenClaw gateway is reachable over Tailscale and the `/hooks/agent`
-   endpoint responds (see `CLAUDE.md` for the hooks config). Hooks are used for
+   endpoint responds (see `PROGRESS.md` for the hooks config). Hooks are used for
    WhatsApp relay, not for n8n.
 4. Build order: **infra-watcher first**, then the cron and on-demand paths end-to-end,
    then cost-tracking, then the remaining watchers, task agents, and ops agents.
@@ -92,8 +92,8 @@ rest of the repo goes public later.
   credentials, and standalone script from an earlier build were unwound and
   deleted from both this repo and the n8n instance
 - ⬜ Connect Vultr MCP + Hostinger MCP to OpenClaw (read-only scope), WHOIS
-  lookup, and per-instance SSH — see `watchers/infra-watcher/` and CLAUDE.md
+  lookup, and per-instance SSH — see `watchers/infra-watcher/` and PROGRESS.md
   for the full build order
 - ⬜ Cost-tracking (Vultr billing endpoints)
 
-Full specs, thresholds, and security notes live in [CLAUDE.md](CLAUDE.md).
+Full specs, thresholds, and security notes live in [PROGRESS.md](PROGRESS.md).

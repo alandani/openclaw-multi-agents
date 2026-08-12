@@ -591,7 +591,7 @@ either agent can be built:
 
 12. **When to start building**: The architecture review punch-list is `P6` — what
     priority do these have relative to the remaining infra-watcher items (items 4-8
-    in CLAUDE.md, e.g. "Connect Vultr MCP scoped read-only", "Set up per-instance
+    in PROGRESS.md, e.g. "Connect Vultr MCP scoped read-only", "Set up per-instance
     SSH access")?
 
 ---

@@ -3,7 +3,7 @@
 MCP-first, natural-language Q&A agent. OpenClaw answers infra questions (e.g.
 "what's CPU% of ulak server", "which instance has low disk space") by calling
 read-only tools directly rather than following a fixed workflow branch. Full
-architecture and rationale live in [CLAUDE.md](../../CLAUDE.md) under
+architecture and rationale live in [PROGRESS.md](../../PROGRESS.md) under
 "Infra watcher — RESET, MCP-first architecture" — this file only covers
 what's specific to this folder.
 
