@@ -687,7 +687,8 @@ Entry" above):
       "memory_get",
       "edit",
       "apply_patch",
-      "write"
+      "write",
+      "hostinger__*"
     ],
     deny: [
       "gateway",
@@ -736,6 +737,22 @@ Entry" above):
   bootstrapTotalMaxChars: 24000
 }
 ```
+
+---
+
+### Update 2026-08-07 — Hostinger MCP access added
+
+Expanded `tools.allow` to include `hostinger__*` (the shared `hostinger` MCP server),
+and expanded the global `mcp.servers.hostinger.toolFilter.include` list in
+`openclaw.json` to add the mutating WordPress endpoints (core/plugin/theme update,
+plugin/theme activate/install/uninstall, cache purge/toggle, maintenance toggle,
+Memcached toggle) alongside the existing read-only set. Purpose: let infra-ops fix
+Hostinger-hosted WordPress sites (update plugins, toggle maintenance mode, clear
+cache, etc.) under the same confirmation-gate model as its SSH categories B–F. See
+`ops/infra-ops/AGENT.md` § "Hostinger — WordPress Fix Access" for the full tool
+split and confirmation rules. `hosting_deleteWordPressInstallationV1` and
+`hosting_installWordPressV1` were deliberately left out of the toolFilter/allowlist
+(too destructive / out of scope for a fix-only agent).
 
 ---
 
