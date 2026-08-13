@@ -96,7 +96,7 @@ bootstrap_prefix() { # $1=user $2=ip $3=port $4=ssh_watcher_key $5=ops_key
 
   for k in "${keys[@]}"; do
     [[ -f "$k" ]] || continue
-    if ssh -i "$k" -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" true >/dev/null 2>&1; then
+    if ssh -i "$k" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" true >/dev/null 2>&1; then
       echo "key:$k"
       return 0
     fi
@@ -128,7 +128,7 @@ run_remote() { # $1=access $2=user@host $3=port $4=command...
     ssh -o ControlPath="$cpath" -p "$port" "$host" "$cmd"
   else
     local key="${access#key:}"
-    ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "$host" "$cmd"
+    ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "$host" "$cmd"
   fi
 }
 
@@ -139,12 +139,12 @@ run_scp() { # $1=access $2=user@host $3=port $4=src $5=dst
     scp -o ControlPath="$cpath" -P "$port" "$src" "$host:$dst"
   else
     local key="${access#key:}"
-    scp -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$port" "$src" "$host:$dst"
+    scp -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$port" "$src" "$host:$dst"
   fi
 }
 
 verify_key() { # $1=user $2=ip $3=port  -> 0 if ops key works
-  ssh -i "$INFRA_OPS_KEY" -o BatchMode=yes -o ConnectTimeout=6 -p "$3" "$1@$2" "echo test" >/dev/null 2>&1
+  ssh -i "$INFRA_OPS_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=6 -p "$3" "$1@$2" "echo test" >/dev/null 2>&1
 }
 
 # --- counters (use $((x+1)), NOT ((x++)) — the latter returns 0 when x=0 and kills the script under set -e) ---

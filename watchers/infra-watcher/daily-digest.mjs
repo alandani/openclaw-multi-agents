@@ -55,7 +55,7 @@ async function runDigest() {
 
         try {
           const output = execSync(
-            `ssh -i ${sshKey} -p ${inst.ssh_port || 22} -o BatchMode=yes -o ConnectTimeout=6 ${inst.ssh_user}@${host} summary`,
+            `ssh -i ${sshKey} -o IdentitiesOnly=yes -p ${inst.ssh_port || 22} -o BatchMode=yes -o ConnectTimeout=6 ${inst.ssh_user}@${host} summary`,
             { encoding: 'utf8', timeout: 10000 }
           );
           results.checks.ssh_summary.push({

@@ -96,7 +96,7 @@ bootstrap_prefix() { # $1=user $2=ip $3=port $4=opskey
   keys+=("$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa")
   for k in "${keys[@]}"; do
     [[ -f "$k" ]] || continue
-    if ssh -i "$k" -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" true >/dev/null 2>&1; then
+    if ssh -i "$k" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" true >/dev/null 2>&1; then
       echo "key:$k"
       return 0
     fi
@@ -127,7 +127,7 @@ run_remote() { # $1=access $2=user@host $3=port $4=command...
     ssh -o ControlPath="$cpath" -p "$port" "$host" "$cmd"
   else
     local key="${access#key:}"
-    ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "$host" "$cmd"
+    ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "$host" "$cmd"
   fi
 }
 
@@ -138,12 +138,12 @@ run_scp() { # $1=access $2=user@host $3=port $4=src $5=dst
     scp -o ControlPath="$cpath" -P "$port" "$src" "$host:$dst"
   else
     local key="${access#key:}"
-    scp -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$port" "$src" "$host:$dst"
+    scp -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$port" "$src" "$host:$dst"
   fi
 }
 
 verify_key() { # $1=user $2=ip $3=port  -> 0 if watcher key works
-  ssh -i "$INFRA_WATCHER_KEY" -o BatchMode=yes -o ConnectTimeout=6 -p "$3" "$1@$2" summary >/dev/null 2>&1
+  ssh -i "$INFRA_WATCHER_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=6 -p "$3" "$1@$2" summary >/dev/null 2>&1
 }
 
 # Deep check for --verify-only: tests each verb individually, then confirms
@@ -152,14 +152,14 @@ verify_key() { # $1=user $2=ip $3=port  -> 0 if watcher key works
 deep_verify() { # $1=user $2=ip $3=port
   local user="$1" ip="$2" port="$3" ok=0 verb
   for verb in disk mem cpu summary; do
-    if ssh -i "$INFRA_WATCHER_KEY" -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" "$verb" >/dev/null 2>&1; then
+    if ssh -i "$INFRA_WATCHER_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" "$verb" >/dev/null 2>&1; then
       echo -e "    ${GREEN}✓${NC} $verb"
     else
       echo -e "    ${RED}✗${NC} $verb"
       ok=1
     fi
   done
-  if ssh -i "$INFRA_WATCHER_KEY" -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" "rm -rf /" 2>&1 | grep -q '^rejected:'; then
+  if ssh -i "$INFRA_WATCHER_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$user@$ip" "rm -rf /" 2>&1 | grep -q '^rejected:'; then
     echo -e "    ${GREEN}✓${NC} restrictions enforced"
   else
     echo -e "    ${RED}✗${NC} restrictions NOT enforced (security issue!)"
