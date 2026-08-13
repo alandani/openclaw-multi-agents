@@ -346,6 +346,15 @@ invoices, balance), route to [cost-tracking](#cost-tracking) under Business Anal
 If the user is asking about *server resources or status* (CPU%, disk, uptime, instance
 list), even if dollars are mentioned tangentially, route here.
 
+**Distinction from infra-ops (root-cause diagnosis)**: infra-watcher reports *status*
+only (CPU%, disk%, uptime, instance list) — it has no process list, container/service
+logs, or `top`/`docker stats` access. If the user asks *why* something is happening —
+"what's causing high CPU", "why is X slow", "what's eating memory on Y" — that's a
+root-cause question, not a status check. infra-watcher will (correctly) say it can't
+answer; route those to [infra-ops](#infra-ops-approval-gated) instead, which has
+read-only diagnostic verbs (`procs`, `docker-ps`, `docker-logs`, `service-status`,
+`service-logs`, `compose-ps`) for exactly this.
+
 ```
 sessions_spawn(
   task: "Read /Users/alandani/Documents/Code/OpenClaw/openclaw-multi-agents/watchers/infra-watcher/AGENT.md, then answer this question using only what it describes: <insert verbatim user message>",
@@ -383,11 +392,23 @@ are **not** read-only. Do NOT delegate to them without explicit user confirmatio
 **Status**: ✅ Deployed — `agents.list[]` entry applied to `openclaw.json` and live.
 Use `agentId: "infra-ops"` for direct agent delegation.
 
-**Delegate only after explicit user confirmation**. Can restart services, run
-migrations, diagnose deeper than the read-only watcher, apply fixes.
+Can restart services, run migrations, diagnose deeper than the read-only watcher
+(process lists, container/service logs), apply fixes. Two flavors below —
+**diagnosis needs an ack, not a confirmation gate; mutation needs both.**
 
-**Trigger phrase**: user asks to *do* something on a server (not just check it).
-Example phrases:
+**Trigger phrase A — read-only diagnosis** (infra-ops's Category A verbs:
+`procs`, `docker-ps`, `docker-logs`, `service-status`, `service-logs`,
+`compose-ps`, `uptime` — none of these can change anything, enforced
+server-side by `ops-check.sh`). Route here when infra-watcher can't answer a
+"why"/root-cause question. Example phrases:
+- "what's causing high CPU on X"
+- "why is X slow"
+- "what process is eating memory on Y"
+- "show me the logs for Z"
+- "is nginx even running"
+
+**Trigger phrase B — mutating actions** (Category B: writes, restarts, anything
+that changes server state). Example phrases:
 - "restart nginx"
 - "deploy the latest build"
 - "fix the DB connection"
@@ -396,10 +417,17 @@ Example phrases:
 - "update WordPress"
 
 **The main agent's pre-delegation flow**:
-1. Send a warning: *"I can look into this, but infra-ops can make changes to your servers. Do you want me to proceed?"*
-2. Wait for explicit "yes" (or equivalent confirmation).
-3. If confirmed, proceed with the delegate-and-ack flow below.
-4. If declined or ambiguous, answer what you can without acting (read-only).
+- **Flavor A (diagnosis)**: no confirmation gate — it's read-only, same trust
+  level as infra-watcher. Ack ("On it, digging into X — back in a sec"), then
+  delegate immediately.
+- **Flavor B (mutation)**:
+  1. Send a warning: *"I can look into this, but infra-ops can make changes to your servers. Do you want me to proceed?"*
+  2. Wait for explicit "yes" (or equivalent confirmation).
+  3. If confirmed, proceed with the delegate-and-ack flow below.
+  4. If declined or ambiguous, answer what you can without acting (read-only).
+- **Ambiguous / mixed request** ("check the DB connection and fix it if it's
+  broken"): treat as Flavor B — the confirmation gate is about what the
+  request *could* trigger, not just its first step.
 
 ```
 sessions_spawn(
