@@ -379,13 +379,13 @@ If that fails, retry with model: `9router/oc/deepseek-v4-flash-free`, then `9rou
 These agents can *act* on your infrastructure or send external communications — they
 are **not** read-only. Do NOT delegate to them without explicit user confirmation.
 
-> **Forward-looking note**: Per the architecture review, these two agents should
-> eventually become real `agents.list[]` entries in the OpenClaw config with their
-> own tool scoping (restricted MCP/SSH tool sets) and access controls. The
-> `sessions_spawn` routing below is a temporary bridge — the real safety boundary
-> should come from OpenClaw's agent-level tool scoping, not from this routing table.
-> Until that's implemented, the main agent **must** get explicit user sign-off
-> before delegating to either agent.
+> **Status note**: `infra-ops`, `dns-edge`, and `app-platform` are all real
+> `agents.list[]` entries in `openclaw.json` with their own tool scoping (restricted
+> MCP/SSH tool sets) and access controls — the safety boundary for those three comes
+> from OpenClaw's agent-level tool scoping, not from this routing table. `invoicing`
+> is not yet a registered agent; its `sessions_spawn` routing below is still the
+> temporary bridge described in the original architecture review. For all four, the
+> main agent **must** get explicit user sign-off before delegating.
 
 ### infra-ops (approval-gated)
 
@@ -436,6 +436,96 @@ sessions_spawn(
 )
 ```
 Model chain: `kr/claude-sonnet-4.5` → `oc/deepseek-v4-flash-free` → `cc/claude-sonnet-5` (configured in `agents.list[].infra-ops.model` in openclaw.json — not repeated here since it can drift; check the live config, not this file, if precision matters).
+
+> **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
+---
+
+### dns-edge (approval-gated)
+
+**Status**: ✅ Deployed — `agents.list[]` entry applied to `openclaw.json` and live.
+Use `agentId: "dns-edge"` for direct agent delegation. Not yet exercised with a real
+user request.
+
+Mutating counterpart to infra-watcher's read-only DNS/domain lookups. Acts on
+Cloudflare only (DNS record CRUD, SSL/TLS mode, zone info) via the `cloudflare`
+MCP server's code-mode tools. Every mutation requires a `yes`/`no` confirmation
+gate — see `ops/dns-edge/AGENT.md` for the exact propose/confirm wording.
+
+**Trigger phrase — read-only DNS/domain questions**: do NOT route here. These go to
+[infra-watcher](#infra-watcher-on-demand-mode) instead. Examples:
+- "what's the DNS status for X"
+- "list all DNS records for Z zone"
+- "when does my domain expire"
+- "what's the SSL mode for this zone"
+
+**Trigger phrase — DNS/SSL/edge mutations**: route here. Examples:
+- "add an A record for X pointing to Y"
+- "update the CNAME for X to Y"
+- "change SSL mode from flexible to full"
+- "delete the old TXT record for X"
+
+**The main agent's pre-delegation flow**:
+1. Send a warning: *"I can do that via dns-edge — it will change [record/setting] on [zone]. Do you want me to proceed?"*
+2. Wait for explicit "yes" (or equivalent confirmation).
+3. If confirmed, proceed with the delegate-and-ack flow below.
+4. If declined or ambiguous, do not proceed — answer what you can from cached/read-only info instead.
+
+```
+sessions_spawn(
+  agentId: "dns-edge",
+  task: "<insert verbatim user message>"
+)
+```
+Model: `9router/Infra-Ops` (configured in `agents.list[].dns-edge.model` in openclaw.json — not repeated here since it can drift; check the live config, not this file, if precision matters).
+
+> **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
+
+**Cross-agent note**: dns-edge never calls app-platform and vice versa. If a request
+needs both (e.g. "add a custom domain to my Vercel project" = a CNAME record *and*
+a Vercel domain-add), the main agent orchestrates it as two separate spawns —
+dns-edge first, then app-platform — each with its own confirmation gate.
+
+---
+
+### app-platform (approval-gated)
+
+**Status**: ✅ Deployed — `agents.list[]` entry applied to `openclaw.json` and live.
+Use `agentId: "app-platform"` for direct agent delegation. `~/.openclaw/secrets/app_platform_projects.json`
+still only has the placeholder `example-project` entry — no real project has been
+wired in, so treat the first real request as untested until it's confirmed working.
+
+Mutating agent for the application lifecycle: Supabase (DB, migrations, RLS, edge
+functions, branches) via MCP, and Vercel (deploys, env vars, domains) via `exec`
+(Vercel CLI / REST API — Vercel's own MCP is remote-OAuth-only and incompatible
+with unattended spawning). Every mutation requires a `yes`/`no` confirmation gate —
+see `ops/app-platform/AGENT.md` for the exact propose/confirm wording.
+
+**Trigger phrase**: Supabase or Vercel app-lifecycle mutations. Examples:
+- "apply the pending migrations"
+- "deploy this to production" / "trigger a Vercel deploy"
+- "set the env var X on Vercel"
+- "deploy the edge function"
+- "merge/create a Supabase branch"
+
+**Distinction from infra-ops**: infra-ops is host-level (SSH, service restarts,
+server config). app-platform is application-level (DB schema, deploy pipeline,
+env vars). A request needing both (e.g. "deploy the new version and restart the
+nginx container") should spawn **both** agents, not one trying to do everything.
+
+**The main agent's pre-delegation flow**:
+1. Send a warning: *"I can do that via app-platform — it will [migrate/deploy/change env var] on [supabase/vercel]. Do you want me to proceed?"*
+2. Wait for explicit "yes" (or equivalent confirmation).
+3. If confirmed, proceed with the delegate-and-ack flow below.
+4. If declined or ambiguous, do not proceed.
+
+```
+sessions_spawn(
+  agentId: "app-platform",
+  task: "<insert verbatim user message>"
+)
+```
+Model: `9router/Infra-Ops` (configured in `agents.list[].app-platform.model` in openclaw.json — not repeated here since it can drift; check the live config, not this file, if precision matters).
 
 > **Ack**: yes — send ack after user confirms, before spawning (see [Acknowledgment & Failure Handling](#acknowledgment--failure-handling) above).
 

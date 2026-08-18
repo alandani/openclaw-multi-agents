@@ -154,6 +154,8 @@ depends how the gateway is run). Confirm before assuming `${VAR}` substitution w
 ### Approval-gated agents (act, but need sign-off on risky steps)
 
 - **Infra ops** — built and live (SSH, restarts, DB fixes — separate from infra watcher, which is read-only). Mutate-capable key deployed and verified on all 6 servers; a forced-command wrapper (`ops-check.sh`) exists and is toggled per server depending on what that server needs (e.g. left open during a migration). See `ops/infra-ops/AGENT.md` and `remote/DEPLOYMENT.md` — check `instances.json`'s `_ops_note` for current per-server restriction status, it changes.
+- **dns-edge** — built and live (`agents.list[]` entry applied to `openclaw.json`, `agentId: "dns-edge"`; `cloudflare` MCP server registered and credentialed). DNS, SSL, edge config via Cloudflare API — mutations only; read-only routes through infra-watcher. Not yet exercised with a real user request. See `ops/dns-edge/AGENT.md` and `ROUTING.md`'s dns-edge section.
+- **app-platform** — built and live (`agents.list[]` entry applied to `openclaw.json`, `agentId: "app-platform"`; `supabase` MCP server registered and credentialed, Vercel via `exec`). Supabase + Vercel combined lifecycle — migrations, deploys, env vars. `~/.openclaw/secrets/app_platform_projects.json` still only has the placeholder `example-project` entry — no real project wired in yet, so this hasn't been exercised end-to-end. See `ops/app-platform/AGENT.md` and `ROUTING.md`'s app-platform section.
 - Invoicing (client-facing, needs approval before sending) — not started
 
 ## Infra watcher — DECIDED: MCP-first architecture (no n8n for this agent)
